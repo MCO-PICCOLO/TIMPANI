@@ -7,7 +7,13 @@ extern "C" {
 
 struct sched_attr {
 	uint32_t size;			/* Size of this structure */
-	uint32_t sched_policy;		/* Policy (SCHED_*) */
+	uint32_t sched_policy;		/* Policy (SCHED_*)
+					   SCHED_NORMAL            0
+					   SCHED_FIFO              1
+					   SCHED_RR                2
+					   SCHED_BATCH             3
+					   SCHED_IDLE              5
+					   SCHED_DEADLINE          6 */
 	uint64_t sched_flags;		/* Flags */
 	int32_t  sched_nice;		/* Nice value (SCHED_OTHER,
 					   SCHED_BATCH) */
