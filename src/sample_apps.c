@@ -11,8 +11,6 @@
 
 #include "sample_apps.h"
 
-#include "libttsched.h"
-
 char pr_name[16];
 
 clockid_t clockid = CLOCK_MONOTONIC;
@@ -53,7 +51,6 @@ void sigusr2_handler(int signo) {
 
 int main(int argc, char *argv[]) {
 	struct sigaction act;
-	struct sched_attr attr;
 
 	int pid = getpid();
 
@@ -61,8 +58,6 @@ int main(int argc, char *argv[]) {
 
 	prctl(PR_SET_NAME, (unsigned long)argv[1], 0, 0, 0);
 	prctl(PR_GET_NAME, pr_name, 0, 0, 0);
-
-	set_schedattr(pid, 80, SCHED_FIFO);
 
 	memset(&act, 0, sizeof(struct sigaction));
 	sigemptyset(&act.sa_mask);
