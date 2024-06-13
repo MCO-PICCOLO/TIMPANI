@@ -3,9 +3,11 @@ cmake_minimum_required(VERSION 3.0)
 # project name and version
 project(libtrpc VERSION 0.1.0 DESCRIPTION "Timpani RPC library")
 
-# pkg-config --cflags --libs libsystemd
-# if this is not available, run 'apt install libsystemd-dev'
+# if pkg-config is not available, run 'sudo apt install pkg-config'
 find_package(PkgConfig REQUIRED)
+
+# pkg-config --cflags --libs libsystemd
+# if libsystemd-dev is not available, run 'sudo apt install libsystemd-dev'
 pkg_check_modules(LIBSYSTEMD REQUIRED libsystemd)
 
 # libtrpc library
