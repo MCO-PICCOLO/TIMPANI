@@ -2,12 +2,37 @@
 
 ## How to build
 
+### Prerequisites
+- Make sure to have pkg-config and libsystemd-dev installed.
 ```
-mkdir build-x86
+sudo apt install pkg-config
+sudo apt install libsystemd-dev
+```
+
+### Compiling for local host
+```
+mkdir -p build-x86
 cd build-x86
-cmake .
+cmake ..
 make
 ```
+
+### Cross-compiling for ARM64
+```
+mkdir -p build-arm64
+cd build-arm64
+cmake -DCMAKE_TOOLCHAIN_FILE=../aarch64-toolchain.cmake ..
+make
+```
+
+### Cross-compiling for ARM32
+```
+mkdir -p build-arm32
+cd build-arm32
+cmake -DCMAKE_TOOLCHAIN_FILE=../armhf-toolchain.cmake ..
+make
+```
+
 ## Running test programs
 
 - The sample server program waits for connection from clients and provides several methods.
