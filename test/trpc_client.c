@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 	deserialize_str(sbuf, str);
 
 	printf("str: %s\n", str);
-	printf("u64: %lx\n", u64);
+	printf("u64: %"PRIu64"\n", u64);
 
 	free_serial_buf(sbuf);
 
