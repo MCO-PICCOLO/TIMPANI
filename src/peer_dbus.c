@@ -10,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 
 // systemd
 #include <systemd/sd-daemon.h>
@@ -105,6 +106,49 @@ static int create_server_socket(int port)
 		return -errno;
 
 	return fd;
+}
+
+static int set_server_sockopt(int fd)
+{
+	int ret;
+	int optval;
+
+	optval = 1;
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &optval, sizeof(optval));
+	if (ret < 0) {
+		LOG_ERROR("%s\n", strerror(errno));
+		return -errno;
+	}
+
+	optval = 1;
+	ret = setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &optval, sizeof(optval));
+	if (ret < 0) {
+		LOG_ERROR("%s\n", strerror(errno));
+		return -errno;
+	}
+
+	optval = 60;
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &optval, sizeof(optval));
+	if (ret < 0) {
+		LOG_ERROR("%s\n", strerror(errno));
+		return -errno;
+	}
+
+	optval = 10;
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &optval, sizeof(optval));
+	if (ret < 0) {
+		LOG_ERROR("%s\n", strerror(errno));
+		return -errno;
+	}
+
+	optval = 3;
+	ret = setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &optval, sizeof(optval));
+	if (ret < 0) {
+		LOG_ERROR("%s\n", strerror(errno));
+		return -errno;
+	}
+
+	return 0;
 }
 
 static sd_bus *init_dbus_server(sd_event *event, int fd, const char *sender, const char *dbus_desc)
@@ -207,14 +251,7 @@ static int server_handler(sd_event_source *es, int fd, uint32_t revents, void *u
 	if (dbus == NULL)
 		return -1;
 
-#if 0
-	int r = bus_socket_set_no_delay(dbus_server);
-	if (r < 0) {
-	}
-	r = bus_socket_set_keepalive(dbus_server);
-	if (r < 0) {
-	}
-#endif
+	set_server_sockopt(connfd);
 
 	return 0;
 }
