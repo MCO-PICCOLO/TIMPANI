@@ -12,9 +12,9 @@ sudo apt install -y libsystemd-dev
 ```
 sudo dpkg --add-architecture arm64
 sudo dpkg --add-architecture armhf
+sudo apt update
 sudo apt install -y crossbuild-essential-arm64
 sudo apt install -y crossbuild-essential-armhf
-sudo apt update
 sudo apt install -y libsystemd-dev:arm64
 sudo apt install -y libsystemd-dev:armhf
 ```
