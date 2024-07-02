@@ -5,9 +5,20 @@
 ### Prerequisites
 - Make sure to have pkg-config and libsystemd-dev installed.
 ```
-sudo apt install pkg-config
-sudo apt install libsystemd-dev
+sudo apt install -y pkg-config
+sudo apt install -y libsystemd-dev
 ```
+- Preparation for cross-compiling using dpkg multi-architecture
+```
+sudo dpkg --add-architecture arm64
+sudo dpkg --add-architecture armhf
+sudo apt install -y crossbuild-essential-arm64
+sudo apt install -y crossbuild-essential-armhf
+sudo apt update
+sudo apt install -y libsystemd-dev:arm64
+sudo apt install -y libsystemd-dev:armhf
+```
+> **_NOTE:_**  If 'apt update' fails, refer to https://askubuntu.com/questions/430705/how-to-use-apt-get-to-download-multi-arch-library.
 
 ### Compiling for local host
 ```
