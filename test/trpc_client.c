@@ -2,14 +2,78 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <assert.h>
 
 #include <libtrpc.h>
 
-int main(int argc, char *argv[])
+#include "schedinfo.h"
+
+#define CLIENT_NAME	"Timpani-N"
+#define SERVER_IPADDR	"localhost"
+#define SERVER_PORT	7777
+
+static struct sched_info sched_info;
+
+static int register_to_server(sd_bus *dbus)
 {
-	sd_event *event = NULL;
-	sd_bus *dbus = NULL;
-	int fd = -1;
+	int ret;
+
+	ret = trpc_client_register(dbus, CLIENT_NAME);
+	if (ret < 0) {
+		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
+	}
+	return ret;
+}
+
+static void deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
+{
+	uint32_t i;
+	uint32_t cid_size;
+
+	// Unpack sched_info
+	deserialize_int32_t(sbuf, &sinfo->nr_tasks);
+	deserialize_int32_t(sbuf, &sinfo->pod_period);
+	deserialize_int32_t(sbuf, &sinfo->container_period);
+	deserialize_int64_t(sbuf, &sinfo->cpumask);
+	deserialize_int32_t(sbuf, &sinfo->container_rt_period);
+	deserialize_int32_t(sbuf, &sinfo->container_rt_runtime);
+	cid_size = sizeof(sinfo->container_id);
+	deserialize_blob(sbuf, sinfo->container_id, &cid_size);
+
+	sinfo->tasks = NULL;
+
+	printf("sinfo->container_id: %.*s\n", cid_size, sinfo->container_id);
+	printf("sinfo->container_rt_runtime: %u\n", sinfo->container_rt_runtime);
+	printf("sinfo->container_rt_period: %u\n", sinfo->container_rt_period);
+	printf("sinfo->cpumask: %lx\n", sinfo->cpumask);
+	printf("sinfo->container_period: %u\n", sinfo->container_period);
+	printf("sinfo->pod_period: %u\n", sinfo->pod_period);
+	printf("sinfo->nr_tasks: %u\n", sinfo->nr_tasks);
+
+
+	// Unpack task_info list entries
+	for (i = 0; i < sinfo->nr_tasks; i++) {
+		struct task_info *tinfo = malloc(sizeof(struct task_info));
+		assert(tinfo);
+
+		deserialize_int32_t(sbuf, &tinfo->release_time);
+		deserialize_int32_t(sbuf, &tinfo->period);
+		deserialize_str(sbuf, tinfo->name);
+		deserialize_int32_t(sbuf, &tinfo->pid);
+
+		tinfo->next = sinfo->tasks;
+		sinfo->tasks = tinfo;
+
+		printf("tinfo->pid: %u\n", tinfo->pid);
+		printf("tinfo->name: %s\n", tinfo->name);
+		printf("tinfo->period: %d\n", tinfo->period);
+		printf("tinfo->release_time: %d\n", tinfo->release_time);
+	}
+}
+
+
+static int get_schedinfo(sd_bus *dbus)
+{
 	int ret;
 	void *buf = NULL;
 	size_t bufsize;
@@ -17,45 +81,59 @@ int main(int argc, char *argv[])
 	uint64_t u64;
 	char str[64];
 
+	ret = trpc_client_schedinfo(dbus, CLIENT_NAME, &buf, &bufsize);
+	if (ret < 0) {
+		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
+		return ret;
+	}
+
+	printf("Received %zu bytes\n", bufsize);
+
+	sbuf = make_serial_buf((void *)buf, bufsize);
+	if (sbuf == NULL) {
+		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
+		return -1;
+	}
+	buf = NULL;	// now use sbuf->data
+
+	deserialize_schedinfo(sbuf, &sched_info);
+
+	free_serial_buf(sbuf);
+
+	return 0;
+}
+
+int main(int argc, char *argv[])
+{
+	sd_event *event = NULL;
+	sd_bus *dbus = NULL;
+	int fd = -1;
+	int ret;
+	char serv_addr[128];
+
 	ret = sd_event_default(&event);
 	if (ret < 0) {
 		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
 		goto out;
 	}
 
-	ret = trpc_client_create("tcp:host=localhost,port=7777", event, &dbus);
+	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", SERVER_IPADDR, SERVER_PORT);
+	ret = trpc_client_create(serv_addr, event, &dbus);
 	if (ret < 0) {
 		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
 		goto out;
 	}
 	fd = ret;
 
-	ret = trpc_client_register(dbus, "Timpani-N");
+	ret = register_to_server(dbus);
 	if (ret < 0) {
-		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
 		goto out;
 	}
 
-	ret = trpc_client_schedinfo(dbus, "Timpani-N", &buf, &bufsize);
+	ret = get_schedinfo(dbus);
 	if (ret < 0) {
-		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
 		goto out;
 	}
-
-	sbuf = make_serial_buf((void *)buf, bufsize);
-	if (sbuf == NULL) {
-		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
-		goto out;
-	}
-	buf = NULL;	// now use sbuf->data
-
-	deserialize_int64_t(sbuf, &u64);
-	deserialize_str(sbuf, str);
-
-	printf("str: %s\n", str);
-	printf("u64: %"PRIx64"\n", u64);
-
-	free_serial_buf(sbuf);
 
 	ret = sd_event_loop(event);
 	if (ret < 0)
@@ -63,5 +141,7 @@ int main(int argc, char *argv[])
 
 out:
 	event = sd_event_unref(event);
+	if (fd >= 0)
+		close(fd);
 	return ret < 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }
