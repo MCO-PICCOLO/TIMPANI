@@ -45,7 +45,7 @@ static void deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 	printf("sinfo->container_id: %.*s\n", cid_size, sinfo->container_id);
 	printf("sinfo->container_rt_runtime: %u\n", sinfo->container_rt_runtime);
 	printf("sinfo->container_rt_period: %u\n", sinfo->container_rt_period);
-	printf("sinfo->cpumask: %lx\n", sinfo->cpumask);
+	printf("sinfo->cpumask: %"PRIx64"\n", sinfo->cpumask);
 	printf("sinfo->container_period: %u\n", sinfo->container_period);
 	printf("sinfo->pod_period: %u\n", sinfo->pod_period);
 	printf("sinfo->nr_tasks: %u\n", sinfo->nr_tasks);
