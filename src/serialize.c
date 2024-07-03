@@ -122,10 +122,17 @@ static int reserve_space(serial_buf_t *b, size_t bytes)
 {
 	if (b == NULL) return -1;
 	if ((b->pos + bytes) > b->size) {
-		void *data = realloc(b->data, b->size * 2);
+		void *data;
+		size_t new_size;
+
+		new_size = b->size * 2;
+		if ((b->pos + bytes) > new_size) new_size += bytes;
+
+		data = realloc(b->data, new_size);
 		if (!data) return -1;
+
 		b->data = data;
-		b->size *= 2;
+		b->size = new_size;
 	}
 	return 0;
 }
