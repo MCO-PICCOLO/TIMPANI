@@ -109,7 +109,16 @@ int main(int argc, char *argv[])
 	sd_bus *dbus = NULL;
 	int fd = -1;
 	int ret;
+	char *addr = SERVER_IPADDR;
+	uint32_t port = SERVER_PORT;
 	char serv_addr[128];
+
+	if (argc > 1) {
+		addr = argv[1];
+		if (argc > 2) {
+			 port = atoi(argv[2]);
+		}
+	}
 
 	ret = sd_event_default(&event);
 	if (ret < 0) {
@@ -117,7 +126,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", SERVER_IPADDR, SERVER_PORT);
+	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", addr, port);
 	ret = trpc_client_create(serv_addr, event, &dbus);
 	if (ret < 0) {
 		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));

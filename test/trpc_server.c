@@ -112,6 +112,11 @@ int main(int argc, char *argv[])
 		.register_cb = register_callback,
 		.schedinfo_cb = schedinfo_callback,
 	};
+	uint32_t port = SERVER_PORT;
+
+	if (argc > 1) {
+		port = atoi(argv[1]);
+	}
 
 	init_schedinfo(&sched_info);
 
@@ -121,12 +126,13 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	ret = trpc_server_create(SERVER_PORT, event, &event_source, &ops);
+	ret = trpc_server_create(port, event, &event_source, &ops);
 	if (ret < 0) {
 		fprintf(stderr, "%s:%d: %s\n", __FUNCTION__, __LINE__, strerror(-ret));
 		goto out;
 	}
 	fd = ret;
+	printf("Listening on %u...\n", port);
 
 	ret = sd_event_loop(event);
 	if (ret < 0)
