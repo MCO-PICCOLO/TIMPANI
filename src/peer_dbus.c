@@ -11,6 +11,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>		// inet_ntop()
 
 // systemd
 #include <systemd/sd-daemon.h>
@@ -232,13 +233,32 @@ cleanup:
 	return NULL;
 }
 
+#if DEBUG
+static void print_client_address(struct sockaddr_in *sa_client)
+{
+	char buf[INET_ADDRSTRLEN];
+
+	inet_ntop(AF_INET, &sa_client->sin_addr, buf, sizeof(buf));
+	LOG_INFO("Connected from %s\n", buf);
+}
+#else
+static inline void print_client_address(struct sockaddr_in *sa_client)
+{
+}
+#endif
+
+
 static int server_handler(sd_event_source *es, int fd, uint32_t revents, void *userdata)
 {
 	int connfd;
 	sd_bus *dbus;
 	sd_event *event = (sd_event *)userdata;
+	struct sockaddr_in sa_client;
+	socklen_t sa_len;
 
-	connfd = accept4(fd, NULL, NULL, SOCK_NONBLOCK | SOCK_CLOEXEC);
+	bzero(&sa_client, sizeof(sa_client));
+	sa_len = sizeof(sa_client);
+	connfd = accept4(fd, &sa_client, &sa_len, SOCK_NONBLOCK | SOCK_CLOEXEC);
 	if (connfd < 0) {
 		if (errno == EAGAIN || errno == EINTR || errno == EWOULDBLOCK) {
 			return 0;
@@ -246,6 +266,8 @@ static int server_handler(sd_event_source *es, int fd, uint32_t revents, void *u
 		LOG_ERROR("%s\n", strerror(errno));
 		return -1;
 	}
+
+	print_client_address(&sa_client);
 
 	dbus = init_dbus_server(event, connfd, TRPC_SERVER_NAME, TRPC_SERVER_DESC);
 	if (dbus == NULL)
