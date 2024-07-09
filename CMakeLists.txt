@@ -10,6 +10,8 @@ find_package(PkgConfig REQUIRED)
 # if libsystemd-dev is not available, run 'sudo apt install libsystemd-dev'
 pkg_check_modules(LIBSYSTEMD REQUIRED libsystemd)
 
+add_compile_definitions("DEBUG=$<CONFIG:Debug>")
+
 # libtrpc library
 add_library(trpc SHARED
 	src/serialize.c
