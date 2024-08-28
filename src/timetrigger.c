@@ -112,7 +112,11 @@ int main(int argc, char *argv[]) {
 	LIST_INIT(&lh);
 
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
+#ifdef CONFIG_TRACE_BPF
+	tracer_on(argc, argv);
+#else
 	tracer_on();
+#endif
 
 	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
 

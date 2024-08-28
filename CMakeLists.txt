@@ -3,9 +3,34 @@ cmake_minimum_required(VERSION 3.0)
 # project name and version
 project(timetrigger VERSION 0.1.0 DESCRIPTION "Timpani Time Trigger")
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
+
+# build options
+option(CONFIG_TRACE_BPF "Enable eBPF-based tttrace" ON)
+
+# Load bpf.cmake
+include(bpf)
+
+if(CONFIG_TRACE_BPF)
+	message("CONFIG_TRACE_BPF is ON")
+	add_compile_definitions(CONFIG_TRACE_BPF=1)
+
+	ADD_BPF(src/trace_bpf.c src/sigwait.bpf.c sigwait.bpf.o sigwait.skel.h)
+	set(TTTRACE_SRC "src/trace_bpf.c")
+else()
+	set(TTTRACE_SRC "src/trace.c")
+endif()
+
 # libtttrace library
 add_library(tttrace SHARED
-	src/trace.c
+	${TTTRACE_SRC}
+)
+target_include_directories(tttrace
+	PRIVATE ${CMAKE_BINARY_DIR}
+)
+target_link_libraries(tttrace
+		$<$<BOOL:${CONFIG_TRACE_BPF}>:bpf>
+		$<$<BOOL:${CONFIG_TRACE_BPF}>:pthread>
 )
 
 # set libtttrace so version
