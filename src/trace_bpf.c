@@ -14,6 +14,8 @@
 
 #include "sigwait.skel.h"
 
+#include "libtttrace.h"
+
 static struct sigwait_bpf *sigwait;
 static struct ring_buffer *rb;
 static pthread_t rb_thread;
@@ -23,22 +25,6 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 {
 	if (level == LIBBPF_DEBUG) return 0;
 	return vfprintf(stderr, format, args);
-}
-
-static int sigwait_rb_process(void *ctx, void *data, size_t len)
-{
-	struct sigwait_event *e = (struct sigwait_event *)data;
-
-	if (e->pid == e->tgid) {
-		// main thread or single thread
-		printf("[%lu] %d sigwait %s\n",
-			e->timestamp, e->pid, e->enter ? "enter" : "exit");
-	} else {
-		printf("[%lu] %d/%d sigwait %s\n",
-			e->timestamp, e->tgid, e->pid, e->enter ? "enter" : "exit");
-	}
-
-	return 0;
 }
 
 static void *sigwait_func(void *arg)
@@ -56,7 +42,7 @@ static void *sigwait_func(void *arg)
 	return NULL;
 }
 
-static int start_sigwait_bpf(int argc, char **argv)
+static int start_sigwait_bpf(ring_buffer_sample_fn sigwait_cb, void *ctx)
 {
 	int ret;
 
@@ -72,17 +58,7 @@ static int start_sigwait_bpf(int argc, char **argv)
 		goto fail;
 	}
 
-	/* Populate the pid_filter_map with PIDs from the command line */
-	for (int i = 1; i < argc; i++) {
-		uint8_t value = 1;
-		int pid = atoi(argv[i]);
-		if (bpf_map_update_elem(bpf_map__fd(sigwait->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
-			fprintf(stderr, "Error adding PID %d to pid_filter_map\n", pid);
-			goto fail;
-		}
-	}
-
-	rb = ring_buffer__new(bpf_map__fd(sigwait->maps.buffer), sigwait_rb_process, NULL, NULL);
+	rb = ring_buffer__new(bpf_map__fd(sigwait->maps.buffer), sigwait_cb, ctx, NULL);
 	if (!rb) {
 		fprintf(stderr, "Error creating ring buffer\n");
 		goto fail;
@@ -109,13 +85,13 @@ fail:
 	return ret;
 }
 
-int tracer_on(int argc, char **argv)
+int tracer_on(ring_buffer_sample_fn sigwait_cb, void *ctx)
 {
 	int ret;
 
 	libbpf_set_print(libbpf_print_fn);
 
-	ret = start_sigwait_bpf(argc, argv);
+	ret = start_sigwait_bpf(sigwait_cb, ctx);
 
 	return ret;
 }
@@ -128,4 +104,19 @@ void tracer_off(void)
 void write_trace_marker(const char *fmt, ...)
 {
 
+}
+
+int tracer_add_pid(int pid)
+{
+	uint8_t value = 1;
+
+	// Check if sigwait BPF feature is initialized
+	if (!sigwait) return -1;
+
+	if (bpf_map_update_elem(bpf_map__fd(sigwait->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
+		fprintf(stderr, "Error adding PID %d to pid_filter_map\n", pid);
+		return -1;
+	}
+
+	return 0;
 }

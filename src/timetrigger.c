@@ -15,9 +15,17 @@
 #include "schedinfo.h"
 #include "timetrigger.h"
 
+#ifdef CONFIG_TRACE_BPF
+#include "trace_bpf.h"
+#endif
+
 struct time_trigger {
 	timer_t timer;
 	struct task_info task;
+#ifdef CONFIG_TRACE_BPF
+	uint64_t sigwait_ts;
+	uint8_t sigwait_enter;
+#endif
 	LIST_ENTRY(time_trigger) entry;
 };
 
@@ -28,9 +36,36 @@ struct task_info ex_tasks[3] = { { 0, {}, 10000, 1000, NULL },
 				{ 0, {}, 50000, 5000, NULL },
 				{ 0, {}, 20000, 2000, NULL } };
 
+static inline uint64_t timespec_to_ns(const struct timespec *ts)
+{
+	return ((uint64_t) ts->tv_sec * NSEC_PER_SEC) + ts->tv_nsec;
+}
+
+static inline uint64_t timespec_to_us(const struct timespec *ts)
+{
+	return ((uint64_t) ts->tv_sec * USEC_PER_SEC) + ts->tv_nsec / NSEC_PER_USEC;
+}
+
+static inline struct timespec ns_to_timespec(const uint64_t ns)
+{
+	struct timespec ts;
+	ts.tv_sec = ns / NSEC_PER_SEC;
+	ts.tv_nsec = ns % NSEC_PER_SEC;
+	return ts;
+}
+
+static inline struct timespec us_to_timespec(const uint64_t us)
+{
+	struct timespec ts;
+	ts.tv_sec = us / USEC_PER_SEC;
+	ts.tv_nsec = (us % USEC_PER_SEC) * NSEC_PER_USEC;
+	return ts;
+}
+
 // TT Handler function executed upon timer expiration based on each period
 static void tt_timer(union sigval value) {
-	struct task_info *task = (struct task_info *)value.sival_ptr;
+	struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
+	struct task_info *task = (struct task_info *)&tt_node->task;
 	struct timespec before, after;
 
 	clock_gettime(CLOCK_MONOTONIC, &before);
@@ -43,6 +78,21 @@ static void tt_timer(union sigval value) {
 		ts.tv_nsec = task->release_time % USEC_PER_SEC * NSEC_PER_USEC;
 		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL);
 	}
+
+#ifdef CONFIG_TRACE_BPF
+	/* Check whether there is a deadline miss or not */
+	if (tt_node->sigwait_ts) {
+		uint64_t deadline_ns = timespec_to_ns(&before);
+
+		// Check if this task is still running
+		if (!tt_node->sigwait_enter) {
+			printf("!!! STILL OVERRUN %s(%d): %lu !!!\n", task->name, task->pid, deadline_ns);
+		// Check if this task meets the deadline
+		} else if (tt_node->sigwait_ts > deadline_ns) {
+			printf("!!! DEADLINE MISS %s(%d): %lu > %lu !!!\n", task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
+		}
+	}
+#endif
 
 	clock_gettime(CLOCK_MONOTONIC, &after);
 	write_trace_marker("Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us \n",
@@ -85,6 +135,30 @@ static bool set_stoptracer_timer(int duration, timer_t *timer) {
 	return true;
 }
 
+#ifdef CONFIG_TRACE_BPF
+static int sigwait_bpf_callback(void *ctx, void *data, size_t len)
+{
+	struct sigwait_event *e = (struct sigwait_event *)data;
+	struct listhead *lh_p = (struct listhead *)ctx;
+	struct time_trigger *tt_p;
+
+	LIST_FOREACH(tt_p, lh_p, entry) {
+		if (tt_p->task.pid == e->pid) {
+#if 0
+			printf("[%lu] %s(%d) sigwait %s\n",
+				e->timestamp, tt_p->task.name, tt_p->task.pid,
+				e->enter ? "enter" : "exit");
+#endif
+			tt_p->sigwait_ts = e->timestamp;
+			tt_p->sigwait_enter = e->enter;
+			break;
+		}
+	}
+
+	return 0;
+}
+#endif
+
 int main(int argc, char *argv[]) {
 	struct sigevent sev;
 	struct timespec starttimer_ts;
@@ -113,7 +187,7 @@ int main(int argc, char *argv[]) {
 
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
 #ifdef CONFIG_TRACE_BPF
-	tracer_on(argc, argv);
+	tracer_on(sigwait_bpf_callback, (void *)&lh);
 #else
 	tracer_on();
 #endif
@@ -137,7 +211,7 @@ int main(int argc, char *argv[]) {
 		sev.sigev_notify = SIGEV_THREAD;
 		sev.sigev_notify_function = tt_timer;
 
-		sev.sigev_value.sival_ptr = &tt_node->task;
+		sev.sigev_value.sival_ptr = tt_node;
 
 		its.it_value.tv_sec = starttimer_ts.tv_sec;
 		its.it_value.tv_nsec = starttimer_ts.tv_nsec + 5000000;
@@ -160,6 +234,8 @@ int main(int argc, char *argv[]) {
 		}
 
 		LIST_INSERT_HEAD(&lh, tt_node, entry);
+
+		tracer_add_pid(tt_node->task.pid);
 	}
 
 	struct time_trigger *tt_p;
