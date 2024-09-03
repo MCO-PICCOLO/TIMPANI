@@ -85,7 +85,7 @@ fail:
 	return ret;
 }
 
-int tracer_on(ring_buffer_sample_fn sigwait_cb, void *ctx)
+int bpf_on(ring_buffer_sample_fn sigwait_cb, void *ctx)
 {
 	int ret;
 
@@ -96,17 +96,12 @@ int tracer_on(ring_buffer_sample_fn sigwait_cb, void *ctx)
 	return ret;
 }
 
-void tracer_off(void)
+void bpf_off(void)
 {
 
 }
 
-void write_trace_marker(const char *fmt, ...)
-{
-
-}
-
-int tracer_add_pid(int pid)
+int bpf_add_pid(int pid)
 {
 	uint8_t value = 1;
 

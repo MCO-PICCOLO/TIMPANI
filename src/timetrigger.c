@@ -15,9 +15,7 @@
 #include "schedinfo.h"
 #include "timetrigger.h"
 
-#ifdef CONFIG_TRACE_BPF
 #include "trace_bpf.h"
-#endif
 
 struct time_trigger {
 	timer_t timer;
@@ -157,6 +155,8 @@ static int sigwait_bpf_callback(void *ctx, void *data, size_t len)
 
 	return 0;
 }
+#else
+static inline int sigwait_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
 int main(int argc, char *argv[]) {
@@ -186,11 +186,8 @@ int main(int argc, char *argv[]) {
 	LIST_INIT(&lh);
 
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
-#ifdef CONFIG_TRACE_BPF
-	tracer_on(sigwait_bpf_callback, (void *)&lh);
-#else
 	tracer_on();
-#endif
+	bpf_on(sigwait_bpf_callback, (void *)&lh);
 
 	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
 
@@ -235,7 +232,7 @@ int main(int argc, char *argv[]) {
 
 		LIST_INSERT_HEAD(&lh, tt_node, entry);
 
-		tracer_add_pid(tt_node->task.pid);
+		bpf_add_pid(tt_node->task.pid);
 	}
 
 	struct time_trigger *tt_p;
