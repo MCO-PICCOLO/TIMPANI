@@ -110,3 +110,6 @@ target_compile_options(exprocs
 		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
 )
 #add_executable(exprocs test/exprocs.c)
+
+# libtrpc library
+add_subdirectory(libtrpc)
