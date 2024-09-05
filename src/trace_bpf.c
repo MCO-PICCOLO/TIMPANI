@@ -13,7 +13,9 @@
 #include "trace_bpf.h"
 
 #include "sigwait.skel.h"
+#ifdef CONFIG_TRACE_BPF_EVENT
 #include "schedstat.skel.h"
+#endif
 
 #include "libtttrace.h"
 
@@ -177,6 +179,7 @@ int bpf_add_pid(int pid)
 		return -1;
 	}
 
+#ifdef CONFIG_TRACE_BPF_EVENT
 	// Check if schedstat BPF feature is initialized
 	if (!schedstat) return -1;
 
@@ -184,6 +187,7 @@ int bpf_add_pid(int pid)
 		fprintf(stderr, "Error adding PID %d to pid_filter_map\n", pid);
 		return -1;
 	}
+#endif
 
 	return 0;
 }
