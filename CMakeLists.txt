@@ -42,7 +42,7 @@ target_link_libraries(trpc_server
 		${LIBSYSTEMD_LIBRARIES}
 )
 target_include_directories(trpc_server
-			PUBLIC ${CMAKE_SOURCE_DIR}/src
+			PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
 			PUBLIC ${LIBSYSTEMD_INCLUDE_DIRS}
 )
 target_compile_options(trpc_server
@@ -56,7 +56,7 @@ target_link_libraries(trpc_client
 		${LIBSYSTEMD_LIBRARIES}
 )
 target_include_directories(trpc_client
-			PUBLIC ${CMAKE_SOURCE_DIR}/src
+			PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
 			PUBLIC ${LIBSYSTEMD_INCLUDE_DIRS}
 )
 target_compile_options(trpc_client
