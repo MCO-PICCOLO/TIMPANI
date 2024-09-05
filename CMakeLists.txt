@@ -12,6 +12,7 @@ include(bpf)
 # libtttrace build options
 option(CONFIG_TRACE_EVENT "Enable event tracing" ON)
 option(CONFIG_TRACE_BPF "Enable eBPF support" ON)
+option(CONFIG_TRACE_BPF_EVENT "Enable eBPF-based event tracing" OFF)
 
 if(CONFIG_TRACE_EVENT)
 	message("CONFIG_TRACE_EVENT is ON")
@@ -24,6 +25,13 @@ if(CONFIG_TRACE_BPF)
 	add_compile_definitions(CONFIG_TRACE_BPF=1)
 	ADD_BPF(src/trace_bpf.c src/sigwait.bpf.c sigwait.bpf.o sigwait.skel.h)
 	set(TTTRACE_SRC ${TTTRACE_SRC} src/trace_bpf.c)
+
+if(CONFIG_TRACE_BPF_EVENT)
+	message("CONFIG_TRACE_BPF_EVENT is ON")
+	add_compile_definitions(CONFIG_TRACE_BPF_EVENT=1)
+	ADD_BPF(src/trace_bpf.c src/schedstat.bpf.c schedstat.bpf.o schedstat.skel.h)
+endif()
+
 endif()
 
 # libtttrace library

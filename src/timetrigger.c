@@ -159,6 +159,32 @@ static int sigwait_bpf_callback(void *ctx, void *data, size_t len)
 static inline int sigwait_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
+#ifdef CONFIG_TRACE_BPF_EVENT
+static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
+{
+	struct schedstat_event *e = (struct schedstat_event *)data;
+	struct listhead *lh_p = (struct listhead *)ctx;
+	struct time_trigger *tt_p;
+	uint64_t runtime, latency;
+
+	runtime = (e->ts_stop - e->ts_start) / NSEC_PER_USEC;
+	latency = (e->ts_start - e->ts_wakeup) / NSEC_PER_USEC;
+
+	LIST_FOREACH(tt_p, lh_p, entry) {
+		if (tt_p->task.pid == e->pid) {
+			printf("%-16s(%7d): CPU%d\truntime(%8lu us)\tlatency(%lu us)\n",
+				tt_p->task.name, e->pid, e->cpu, runtime, latency);
+			break;
+		}
+	}
+
+	return 0;
+}
+#else
+static inline int schedstat_bpf_callback(void *ctx, void *data, size_t len) {}
+#endif
+
+
 int main(int argc, char *argv[]) {
 	struct sigevent sev;
 	struct timespec starttimer_ts;
@@ -187,7 +213,7 @@ int main(int argc, char *argv[]) {
 
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
 	tracer_on();
-	bpf_on(sigwait_bpf_callback, (void *)&lh);
+	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
 
 	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
 

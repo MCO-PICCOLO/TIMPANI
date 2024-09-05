@@ -12,6 +12,14 @@ struct sigwait_event {
 	uint8_t enter;
 };
 
+struct schedstat_event {
+	int pid;
+	int cpu;
+	uint64_t ts_wakeup;
+	uint64_t ts_start;
+	uint64_t ts_stop;
+};
+
 #ifdef __cplusplus
 }
 #endif
