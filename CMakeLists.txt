@@ -113,3 +113,25 @@ target_compile_options(exprocs
 
 # libtrpc library
 add_subdirectory(libtrpc)
+
+# dummy Timpani-O server program
+add_executable(dummy_server test/dummy_server.c)
+target_link_libraries(dummy_server
+		trpc
+		yaml
+		systemd
+)
+target_include_directories(dummy_server
+			PUBLIC ${CMAKE_SOURCE_DIR}/src
+			PUBLIC ${CMAKE_SOURCE_DIR}/libtrpc/src
+)
+add_custom_command(TARGET dummy_server POST_BUILD
+		COMMENT "Copying schedinfo.yaml"
+		COMMAND ${CMAKE_COMMAND} -E copy
+			${CMAKE_SOURCE_DIR}/test/schedinfo.yaml
+			${CMAKE_CURRENT_BINARY_DIR}/schedinfo.yaml
+)
+set_property(TARGET dummy_server
+	APPEND
+	PROPERTY ADDITIONAL_CLEAN_FILES schedinfo.yaml
+)
