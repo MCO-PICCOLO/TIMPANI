@@ -11,6 +11,7 @@
 
 #include "libtttrace.h"
 #include "libttsched.h"
+#include <libtrpc.h>
 
 #include "schedinfo.h"
 #include "timetrigger.h"
@@ -29,10 +30,7 @@ struct time_trigger {
 
 LIST_HEAD(listhead, time_trigger);
 
-// example tasks for time_trigger
-struct task_info ex_tasks[3] = { { 0, {}, 10000, 1000, NULL },
-				{ 0, {}, 50000, 5000, NULL },
-				{ 0, {}, 20000, 2000, NULL } };
+static struct sched_info sched_info;
 
 static inline uint64_t timespec_to_ns(const struct timespec *ts)
 {
@@ -184,6 +182,104 @@ static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
 static inline int schedstat_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
+static int init_trpc(sd_bus **dbus_ret, sd_event **event_ret)
+{
+	int ret;
+	char serv_addr[128];
+
+	ret = sd_event_default(event_ret);
+	if (ret < 0) {
+		return ret;
+	}
+
+	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", "localhost", 7777);
+	ret = trpc_client_create(serv_addr, *event_ret, dbus_ret);
+	if (ret < 0) {
+		*event_ret = sd_event_unref(*event_ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
+{
+	uint32_t i;
+	uint32_t cid_size;
+
+	// Unpack sched_info
+	deserialize_int32_t(sbuf, &sinfo->nr_tasks);
+	deserialize_int32_t(sbuf, &sinfo->pod_period);
+	deserialize_int32_t(sbuf, &sinfo->container_period);
+	deserialize_int64_t(sbuf, &sinfo->cpumask);
+	deserialize_int32_t(sbuf, &sinfo->container_rt_period);
+	deserialize_int32_t(sbuf, &sinfo->container_rt_runtime);
+	cid_size = sizeof(sinfo->container_id);
+	deserialize_blob(sbuf, sinfo->container_id, &cid_size);
+
+	sinfo->tasks = NULL;
+
+#if 0
+	printf("sinfo->container_id: %.*s\n", cid_size, sinfo->container_id);
+	printf("sinfo->container_rt_runtime: %u\n", sinfo->container_rt_runtime);
+	printf("sinfo->container_rt_period: %u\n", sinfo->container_rt_period);
+	printf("sinfo->cpumask: %"PRIx64"\n", sinfo->cpumask);
+	printf("sinfo->container_period: %u\n", sinfo->container_period);
+	printf("sinfo->pod_period: %u\n", sinfo->pod_period);
+	printf("sinfo->nr_tasks: %u\n", sinfo->nr_tasks);
+#endif
+
+	// Unpack task_info list entries
+	for (i = 0; i < sinfo->nr_tasks; i++) {
+		struct task_info *tinfo = malloc(sizeof(struct task_info));
+		if (tinfo == NULL) {
+			// out of memory
+			return -1;
+		}
+
+		deserialize_int32_t(sbuf, &tinfo->release_time);
+		deserialize_int32_t(sbuf, &tinfo->period);
+		deserialize_str(sbuf, tinfo->name);
+		deserialize_int32_t(sbuf, &tinfo->pid);
+
+		tinfo->next = sinfo->tasks;
+		sinfo->tasks = tinfo;
+
+#if 0
+		printf("tinfo->pid: %u\n", tinfo->pid);
+		printf("tinfo->name: %s\n", tinfo->name);
+		printf("tinfo->period: %d\n", tinfo->period);
+		printf("tinfo->release_time: %d\n", tinfo->release_time);
+#endif
+	}
+
+	return 0;
+}
+
+static int get_schedinfo(sd_bus *dbus)
+{
+	int ret;
+	void *buf = NULL;
+	size_t bufsize;
+	serial_buf_t *sbuf = NULL;
+
+	ret = trpc_client_schedinfo(dbus, "Timpani-N", &buf, &bufsize);
+	if (ret < 0) {
+		return ret;
+	}
+
+	sbuf = make_serial_buf((void *)buf, bufsize);
+	if (sbuf == NULL) {
+		return -1;
+	}
+	buf = NULL;	// now use sbuf->data
+
+	deserialize_schedinfo(sbuf, &sched_info);
+
+	free_serial_buf(sbuf);
+
+	return 0;
+}
 
 int main(int argc, char *argv[]) {
 	struct sigevent sev;
@@ -196,20 +292,24 @@ int main(int argc, char *argv[]) {
 	bool settimer = false;
 	int traceduration = 10;		// trace in 10 seconds
 
-	int cnt_ex_tasks = sizeof(ex_tasks)/sizeof(struct task_info);
-
 	int cpu = 3;
 	set_affinity(cpu);
 	set_schedattr(getpid(), 81, SCHED_FIFO);
 
-	if ((argc-1) != cnt_ex_tasks) {
-		printf("Arguments should be %d, \
-			because example tasks are only %d!!!\n",
-			cnt_ex_tasks, cnt_ex_tasks);
+	LIST_INIT(&lh);
+
+	sd_event *event = NULL;
+	sd_bus *dbus = NULL;
+
+	// Initialze TRPC channel
+	if (init_trpc(&dbus, &event) < 0) {
 		return EXIT_FAILURE;
 	}
 
-	LIST_INIT(&lh);
+	// Get Schedule Info
+	if (get_schedinfo(dbus) < 0) {
+		return EXIT_FAILURE;
+	}
 
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
 	tracer_on();
@@ -217,19 +317,20 @@ int main(int argc, char *argv[]) {
 
 	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
 
-	for (int i = 0; i < cnt_ex_tasks; i++) {
+	for (struct task_info *ti = sched_info.tasks; ti; ti = ti->next) {
 		struct time_trigger *tt_node = calloc(1, sizeof(struct time_trigger));
 
 		memset(&sev, 0, sizeof(sev));
 		memset(&its, 0, sizeof(its));
 
-		tt_node->task = ex_tasks[i];
+		memcpy(&tt_node->task, ti, sizeof(tt_node->task));
 
-		// TODO: PIDs from arguments are used for example
-		// Need to change to get data from sched_info of Receiver
-		tt_node->task.pid = atol(argv[i+1]);
-
-		get_process_name_by_pid(tt_node->task.pid, tt_node->task.name);
+		tt_node->task.pid = get_pid_by_name(tt_node->task.name);
+		if (tt_node->task.pid == -1) {
+			printf("%s is not running !\n", tt_node->task.name);
+			free(tt_node);
+			continue;
+		}
 
 		sev.sigev_notify = SIGEV_THREAD;
 		sev.sigev_notify_function = tt_timer;

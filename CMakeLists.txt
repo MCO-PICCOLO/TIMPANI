@@ -90,9 +90,12 @@ add_executable(timetrigger src/timetrigger.c)
 target_link_libraries(timetrigger
 		tttrace
 		ttsched
+		trpc
+		systemd
 )
 target_include_directories(timetrigger
 			PUBLIC ${CMAKE_SOURCE_DIR}/src
+			PUBLIC ${CMAKE_SOURCE_DIR}/libtrpc/src
 )
 target_compile_options(timetrigger
 		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
