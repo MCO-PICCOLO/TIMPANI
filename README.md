@@ -8,17 +8,53 @@
 ![TT_2](tt_2.PNG)
 ![TT_3](tt_3.PNG)
 
+## Prerequisites
+
+libbpf-dev and linux-tools(bpftool) required for bpf feature
+```
+sudo apt install -y libbpf-dev
+sudo apt install -y linux-tools-$(uname -r)
+```
+
+pkg-config and libsystemd-dev required for libtrpc feature
+```
+sudo apt install -y pkg-config
+sudo apt install -y libsystemd-dev
+```
+
+libyaml required for dummy_server program
+
+```
+sudo apt install -y libyaml-dev
+```
 
 ## Build
 
 ```
 git clone http://mod.lge.com/hub/timpani/time-trigger.git
 cd time-trigger
+git submodule init
+git submodule update
 mkdir build
 cd build
 cmake ..
 make
 ```
+### Build options
+
+- CONFIG_TRACE_EVENT (ON by default)
+
+  - Gets ftrace dump for sched, timer, signal, and trace_marker events
+
+- CONFIG_TRACE_BPF (ON by default)
+
+  - Activates a bpf program to trace sigwait system call entry/exit of time-triggered tasks
+  - Makes it possible to detect deadline misses
+
+- CONFIG_TRACE_BPF_EVENT (OFF by default)
+
+  - Loads a bpf program to keep track of sched_switch and sched_waking events of time-triggered tasks
+  - Calculates on-cpu time and scheduling latency
 
 ## How to use
 
@@ -40,10 +76,16 @@ cd build
 sudo ./exprocs wakee3 20000
 ```
 
+execute dummy server, and modify schedinfo.yaml before running if task info is different 
+```
+cd build
+./dummy_server
+```
+
 execute time trigger in other terminal
 ```
 cd build
-sudo ./timetrigger pid_wakee1 pid_wakee2 pid_wakee3
+sudo ./timetrigger
 ```
 
 ***
