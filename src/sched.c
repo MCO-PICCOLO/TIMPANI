@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <dirent.h>
 #include <sys/syscall.h>
 
 #include "libttsched.h"
@@ -60,4 +61,81 @@ void get_process_name_by_pid(const int pid, char name[])
 			fclose(f);
 		}
 	}
+}
+
+static void get_thread_name(pid_t pid, pid_t tid, char *name, size_t len)
+{
+	char path[256];
+	snprintf(path, sizeof(path), "/proc/%d/task/%d/comm", pid, tid);
+
+	FILE *file = fopen(path, "r");
+	if (file == NULL) {
+		return;
+	}
+
+	fgets(name, len, file);
+	fclose(file);
+
+	// Remove the newline character at the end
+	size_t nl = strcspn(name, "\n");
+	if (name[nl] == '\n') {
+		name[nl] = '\0';
+	}
+}
+
+static int list_threads(const char *name, int pid)
+{
+	int ret = -1;
+	char path[256];
+	snprintf(path, sizeof(path), "/proc/%d/task", pid);
+
+	DIR *dir = opendir(path);
+	if (!dir) {
+		perror("opendir");
+		return -1;
+	}
+
+	struct dirent *entry;
+	while ((entry = readdir(dir)) != NULL) {
+		if (entry->d_type == DT_DIR) {
+			int tid = atoi(entry->d_name);
+			if (tid > 0) {	// Skip '.' and '..' and non-numeric entries
+				char tname[256];
+				get_thread_name(pid, tid, tname, sizeof(tname));
+				if (strcmp(name, tname) == 0) {
+					// found it
+					ret = tid;
+					break;
+				}
+			}
+		}
+	}
+	closedir(dir);
+	return ret;
+}
+
+int get_pid_by_name(const char *name)
+{
+	int ret = -1;
+
+	DIR *proc_dir = opendir("/proc");
+	if (!proc_dir) {
+		perror("failed to open /proc");
+		return -1;
+	}
+
+	struct dirent *entry;
+	while ((entry = readdir(proc_dir)) != NULL) {
+		if (entry->d_type == DT_DIR) {
+			int pid = atoi(entry->d_name);
+			if (pid > 0) {	// Skip '.' and '..' and non-numeric entries
+				ret = list_threads(name, pid);
+				if (ret != -1) {
+					break;
+				}
+			}
+		}
+	}
+	closedir(proc_dir);
+	return ret;
 }

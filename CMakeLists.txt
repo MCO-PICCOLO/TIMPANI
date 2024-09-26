@@ -3,9 +3,47 @@ cmake_minimum_required(VERSION 3.0)
 # project name and version
 project(timetrigger VERSION 0.1.0 DESCRIPTION "Timpani Time Trigger")
 
+# Set cmake module path
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
+
+# Load bpf.cmake
+include(bpf)
+
+# libtttrace build options
+option(CONFIG_TRACE_EVENT "Enable event tracing" ON)
+option(CONFIG_TRACE_BPF "Enable eBPF support" ON)
+option(CONFIG_TRACE_BPF_EVENT "Enable eBPF-based event tracing" OFF)
+
+if(CONFIG_TRACE_EVENT)
+	message("CONFIG_TRACE_EVENT is ON")
+	add_compile_definitions(CONFIG_TRACE_EVENT=1)
+	set(TTTRACE_SRC ${TTTRACE_SRC} src/trace.c)
+endif()
+
+if(CONFIG_TRACE_BPF)
+	message("CONFIG_TRACE_BPF is ON")
+	add_compile_definitions(CONFIG_TRACE_BPF=1)
+	ADD_BPF(src/trace_bpf.c src/sigwait.bpf.c sigwait.bpf.o sigwait.skel.h)
+	set(TTTRACE_SRC ${TTTRACE_SRC} src/trace_bpf.c)
+
+if(CONFIG_TRACE_BPF_EVENT)
+	message("CONFIG_TRACE_BPF_EVENT is ON")
+	add_compile_definitions(CONFIG_TRACE_BPF_EVENT=1)
+	ADD_BPF(src/trace_bpf.c src/schedstat.bpf.c schedstat.bpf.o schedstat.skel.h)
+endif()
+
+endif()
+
 # libtttrace library
 add_library(tttrace SHARED
-	src/trace.c
+	${TTTRACE_SRC}
+)
+target_include_directories(tttrace
+		PRIVATE $<$<BOOL:${CONFIG_TRACE_BPF}>:${CMAKE_BINARY_DIR}>
+)
+target_link_libraries(tttrace
+		$<$<BOOL:${CONFIG_TRACE_BPF}>:bpf>
+		$<$<BOOL:${CONFIG_TRACE_BPF}>:pthread>
 )
 
 # set libtttrace so version
@@ -52,9 +90,12 @@ add_executable(timetrigger src/timetrigger.c)
 target_link_libraries(timetrigger
 		tttrace
 		ttsched
+		trpc
+		systemd
 )
 target_include_directories(timetrigger
 			PUBLIC ${CMAKE_SOURCE_DIR}/src
+			PUBLIC ${CMAKE_SOURCE_DIR}/libtrpc/src
 )
 target_compile_options(timetrigger
 		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
@@ -72,3 +113,28 @@ target_compile_options(exprocs
 		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
 )
 #add_executable(exprocs test/exprocs.c)
+
+# libtrpc library
+add_subdirectory(libtrpc)
+
+# dummy Timpani-O server program
+add_executable(dummy_server test/dummy_server.c)
+target_link_libraries(dummy_server
+		trpc
+		yaml
+		systemd
+)
+target_include_directories(dummy_server
+			PUBLIC ${CMAKE_SOURCE_DIR}/src
+			PUBLIC ${CMAKE_SOURCE_DIR}/libtrpc/src
+)
+add_custom_command(TARGET dummy_server POST_BUILD
+		COMMENT "Copying schedinfo.yaml"
+		COMMAND ${CMAKE_COMMAND} -E copy
+			${CMAKE_SOURCE_DIR}/test/schedinfo.yaml
+			${CMAKE_CURRENT_BINARY_DIR}/schedinfo.yaml
+)
+set_property(TARGET dummy_server
+	APPEND
+	PROPERTY ADDITIONAL_CLEAN_FILES schedinfo.yaml
+)

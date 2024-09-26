@@ -11,26 +11,57 @@
 
 #include "libtttrace.h"
 #include "libttsched.h"
+#include <libtrpc.h>
 
 #include "schedinfo.h"
 #include "timetrigger.h"
 
+#include "trace_bpf.h"
+
 struct time_trigger {
 	timer_t timer;
 	struct task_info task;
+#ifdef CONFIG_TRACE_BPF
+	uint64_t sigwait_ts;
+	uint8_t sigwait_enter;
+#endif
 	LIST_ENTRY(time_trigger) entry;
 };
 
 LIST_HEAD(listhead, time_trigger);
 
-// example tasks for time_trigger
-struct task_info ex_tasks[3] = { { 0, {}, 10000, 1000, NULL },
-				{ 0, {}, 50000, 5000, NULL },
-				{ 0, {}, 20000, 2000, NULL } };
+static struct sched_info sched_info;
+
+static inline uint64_t timespec_to_ns(const struct timespec *ts)
+{
+	return ((uint64_t) ts->tv_sec * NSEC_PER_SEC) + ts->tv_nsec;
+}
+
+static inline uint64_t timespec_to_us(const struct timespec *ts)
+{
+	return ((uint64_t) ts->tv_sec * USEC_PER_SEC) + ts->tv_nsec / NSEC_PER_USEC;
+}
+
+static inline struct timespec ns_to_timespec(const uint64_t ns)
+{
+	struct timespec ts;
+	ts.tv_sec = ns / NSEC_PER_SEC;
+	ts.tv_nsec = ns % NSEC_PER_SEC;
+	return ts;
+}
+
+static inline struct timespec us_to_timespec(const uint64_t us)
+{
+	struct timespec ts;
+	ts.tv_sec = us / USEC_PER_SEC;
+	ts.tv_nsec = (us % USEC_PER_SEC) * NSEC_PER_USEC;
+	return ts;
+}
 
 // TT Handler function executed upon timer expiration based on each period
 static void tt_timer(union sigval value) {
-	struct task_info *task = (struct task_info *)value.sival_ptr;
+	struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
+	struct task_info *task = (struct task_info *)&tt_node->task;
 	struct timespec before, after;
 
 	clock_gettime(CLOCK_MONOTONIC, &before);
@@ -43,6 +74,21 @@ static void tt_timer(union sigval value) {
 		ts.tv_nsec = task->release_time % USEC_PER_SEC * NSEC_PER_USEC;
 		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL);
 	}
+
+#ifdef CONFIG_TRACE_BPF
+	/* Check whether there is a deadline miss or not */
+	if (tt_node->sigwait_ts) {
+		uint64_t deadline_ns = timespec_to_ns(&before);
+
+		// Check if this task is still running
+		if (!tt_node->sigwait_enter) {
+			printf("!!! STILL OVERRUN %s(%d): %lu !!!\n", task->name, task->pid, deadline_ns);
+		// Check if this task meets the deadline
+		} else if (tt_node->sigwait_ts > deadline_ns) {
+			printf("!!! DEADLINE MISS %s(%d): %lu > %lu !!!\n", task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
+		}
+	}
+#endif
 
 	clock_gettime(CLOCK_MONOTONIC, &after);
 	write_trace_marker("Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us \n",
@@ -85,6 +131,156 @@ static bool set_stoptracer_timer(int duration, timer_t *timer) {
 	return true;
 }
 
+#ifdef CONFIG_TRACE_BPF
+static int sigwait_bpf_callback(void *ctx, void *data, size_t len)
+{
+	struct sigwait_event *e = (struct sigwait_event *)data;
+	struct listhead *lh_p = (struct listhead *)ctx;
+	struct time_trigger *tt_p;
+
+	LIST_FOREACH(tt_p, lh_p, entry) {
+		if (tt_p->task.pid == e->pid) {
+#if 0
+			printf("[%lu] %s(%d) sigwait %s\n",
+				e->timestamp, tt_p->task.name, tt_p->task.pid,
+				e->enter ? "enter" : "exit");
+#endif
+			tt_p->sigwait_ts = e->timestamp;
+			tt_p->sigwait_enter = e->enter;
+			break;
+		}
+	}
+
+	return 0;
+}
+#else
+static inline int sigwait_bpf_callback(void *ctx, void *data, size_t len) {}
+#endif
+
+#ifdef CONFIG_TRACE_BPF_EVENT
+static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
+{
+	struct schedstat_event *e = (struct schedstat_event *)data;
+	struct listhead *lh_p = (struct listhead *)ctx;
+	struct time_trigger *tt_p;
+	uint64_t runtime, latency;
+
+	runtime = (e->ts_stop - e->ts_start) / NSEC_PER_USEC;
+	latency = (e->ts_start - e->ts_wakeup) / NSEC_PER_USEC;
+
+	LIST_FOREACH(tt_p, lh_p, entry) {
+		if (tt_p->task.pid == e->pid) {
+			printf("%-16s(%7d): CPU%d\truntime(%8lu us)\tlatency(%lu us)\n",
+				tt_p->task.name, e->pid, e->cpu, runtime, latency);
+			break;
+		}
+	}
+
+	return 0;
+}
+#else
+static inline int schedstat_bpf_callback(void *ctx, void *data, size_t len) {}
+#endif
+
+static int init_trpc(sd_bus **dbus_ret, sd_event **event_ret)
+{
+	int ret;
+	char serv_addr[128];
+
+	ret = sd_event_default(event_ret);
+	if (ret < 0) {
+		return ret;
+	}
+
+	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", "localhost", 7777);
+	ret = trpc_client_create(serv_addr, *event_ret, dbus_ret);
+	if (ret < 0) {
+		*event_ret = sd_event_unref(*event_ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
+{
+	uint32_t i;
+	uint32_t cid_size;
+
+	// Unpack sched_info
+	deserialize_int32_t(sbuf, &sinfo->nr_tasks);
+	deserialize_int32_t(sbuf, &sinfo->pod_period);
+	deserialize_int32_t(sbuf, &sinfo->container_period);
+	deserialize_int64_t(sbuf, &sinfo->cpumask);
+	deserialize_int32_t(sbuf, &sinfo->container_rt_period);
+	deserialize_int32_t(sbuf, &sinfo->container_rt_runtime);
+	cid_size = sizeof(sinfo->container_id);
+	deserialize_blob(sbuf, sinfo->container_id, &cid_size);
+
+	sinfo->tasks = NULL;
+
+#if 0
+	printf("sinfo->container_id: %.*s\n", cid_size, sinfo->container_id);
+	printf("sinfo->container_rt_runtime: %u\n", sinfo->container_rt_runtime);
+	printf("sinfo->container_rt_period: %u\n", sinfo->container_rt_period);
+	printf("sinfo->cpumask: %"PRIx64"\n", sinfo->cpumask);
+	printf("sinfo->container_period: %u\n", sinfo->container_period);
+	printf("sinfo->pod_period: %u\n", sinfo->pod_period);
+	printf("sinfo->nr_tasks: %u\n", sinfo->nr_tasks);
+#endif
+
+	// Unpack task_info list entries
+	for (i = 0; i < sinfo->nr_tasks; i++) {
+		struct task_info *tinfo = malloc(sizeof(struct task_info));
+		if (tinfo == NULL) {
+			// out of memory
+			return -1;
+		}
+
+		deserialize_int32_t(sbuf, &tinfo->release_time);
+		deserialize_int32_t(sbuf, &tinfo->period);
+		deserialize_str(sbuf, tinfo->name);
+		deserialize_int32_t(sbuf, &tinfo->pid);
+
+		tinfo->next = sinfo->tasks;
+		sinfo->tasks = tinfo;
+
+#if 0
+		printf("tinfo->pid: %u\n", tinfo->pid);
+		printf("tinfo->name: %s\n", tinfo->name);
+		printf("tinfo->period: %d\n", tinfo->period);
+		printf("tinfo->release_time: %d\n", tinfo->release_time);
+#endif
+	}
+
+	return 0;
+}
+
+static int get_schedinfo(sd_bus *dbus)
+{
+	int ret;
+	void *buf = NULL;
+	size_t bufsize;
+	serial_buf_t *sbuf = NULL;
+
+	ret = trpc_client_schedinfo(dbus, "Timpani-N", &buf, &bufsize);
+	if (ret < 0) {
+		return ret;
+	}
+
+	sbuf = make_serial_buf((void *)buf, bufsize);
+	if (sbuf == NULL) {
+		return -1;
+	}
+	buf = NULL;	// now use sbuf->data
+
+	deserialize_schedinfo(sbuf, &sched_info);
+
+	free_serial_buf(sbuf);
+
+	return 0;
+}
+
 int main(int argc, char *argv[]) {
 	struct sigevent sev;
 	struct timespec starttimer_ts;
@@ -96,44 +292,50 @@ int main(int argc, char *argv[]) {
 	bool settimer = false;
 	int traceduration = 10;		// trace in 10 seconds
 
-	int cnt_ex_tasks = sizeof(ex_tasks)/sizeof(struct task_info);
-
 	int cpu = 3;
 	set_affinity(cpu);
 	set_schedattr(getpid(), 81, SCHED_FIFO);
 
-	if ((argc-1) != cnt_ex_tasks) {
-		printf("Arguments should be %d, \
-			because example tasks are only %d!!!\n",
-			cnt_ex_tasks, cnt_ex_tasks);
+	LIST_INIT(&lh);
+
+	sd_event *event = NULL;
+	sd_bus *dbus = NULL;
+
+	// Initialze TRPC channel
+	if (init_trpc(&dbus, &event) < 0) {
 		return EXIT_FAILURE;
 	}
 
-	LIST_INIT(&lh);
+	// Get Schedule Info
+	if (get_schedinfo(dbus) < 0) {
+		return EXIT_FAILURE;
+	}
 
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
 	tracer_on();
+	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
 
 	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
 
-	for (int i = 0; i < cnt_ex_tasks; i++) {
+	for (struct task_info *ti = sched_info.tasks; ti; ti = ti->next) {
 		struct time_trigger *tt_node = calloc(1, sizeof(struct time_trigger));
 
 		memset(&sev, 0, sizeof(sev));
 		memset(&its, 0, sizeof(its));
 
-		tt_node->task = ex_tasks[i];
+		memcpy(&tt_node->task, ti, sizeof(tt_node->task));
 
-		// TODO: PIDs from arguments are used for example
-		// Need to change to get data from sched_info of Receiver
-		tt_node->task.pid = atol(argv[i+1]);
-
-		get_process_name_by_pid(tt_node->task.pid, tt_node->task.name);
+		tt_node->task.pid = get_pid_by_name(tt_node->task.name);
+		if (tt_node->task.pid == -1) {
+			printf("%s is not running !\n", tt_node->task.name);
+			free(tt_node);
+			continue;
+		}
 
 		sev.sigev_notify = SIGEV_THREAD;
 		sev.sigev_notify_function = tt_timer;
 
-		sev.sigev_value.sival_ptr = &tt_node->task;
+		sev.sigev_value.sival_ptr = tt_node;
 
 		its.it_value.tv_sec = starttimer_ts.tv_sec;
 		its.it_value.tv_nsec = starttimer_ts.tv_nsec + 5000000;
@@ -156,6 +358,8 @@ int main(int argc, char *argv[]) {
 		}
 
 		LIST_INSERT_HEAD(&lh, tt_node, entry);
+
+		bpf_add_pid(tt_node->task.pid);
 	}
 
 	struct time_trigger *tt_p;

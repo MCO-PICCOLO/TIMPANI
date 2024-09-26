@@ -1,0 +1,10 @@
+tasks:
+  - name: wakee1
+    period: 10000
+    release: 1000
+  - name: wakee2
+    period: 50000
+    release: 5000
+  - name: wakee3
+    period: 20000
+    release: 2000
