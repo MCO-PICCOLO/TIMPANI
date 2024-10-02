@@ -1,6 +1,8 @@
-# Get the architecture name for BPF header include directory.
-execute_process(COMMAND uname -m OUTPUT_VARIABLE BPF_ARCH OUTPUT_STRIP_TRAILING_WHITESPACE)
-set(BPF_INCLUDE_DIR "/usr/include/${BPF_ARCH}-linux-gnu/")
+if(NOT CMAKE_TOOLCHAIN_FILE)
+	set(BPF_INCLUDE_DIR "/usr/include/${CMAKE_SYSTEM_PROCESSOR}-linux-gnu")
+else()
+	set(BPF_INCLUDE_DIR "/usr/${CMAKE_SYSTEM_PROCESSOR}-linux-gnu/include")
+endif()
 
 # ADD_BPF macro
 macro(ADD_BPF Loader Input Output OutputSkel)
