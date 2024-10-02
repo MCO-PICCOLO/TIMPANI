@@ -6,9 +6,6 @@ project(timetrigger VERSION 0.1.0 DESCRIPTION "Timpani Time Trigger")
 # Set cmake module path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
 
-# Load bpf.cmake
-include(bpf)
-
 # libtttrace build options
 option(CONFIG_TRACE_EVENT "Enable event tracing" ON)
 option(CONFIG_TRACE_BPF "Enable eBPF support" ON)
@@ -22,6 +19,16 @@ endif()
 
 if(CONFIG_TRACE_BPF)
 	message("CONFIG_TRACE_BPF is ON")
+
+	# for ExternalProject_Add
+	include(ExternalProject)
+
+	# load libbpf.cmake
+	include(libbpf)
+
+	# Load bpf.cmake
+	include(bpf)
+
 	add_compile_definitions(CONFIG_TRACE_BPF=1)
 	ADD_BPF(src/trace_bpf.c src/sigwait.bpf.c sigwait.bpf.o sigwait.skel.h)
 	set(TTTRACE_SRC ${TTTRACE_SRC} src/trace_bpf.c)
@@ -38,6 +45,9 @@ endif()
 add_library(tttrace SHARED
 	${TTTRACE_SRC}
 )
+if(CONFIG_TRACE_BPF)
+	add_dependencies(tttrace libbpf)
+endif()
 target_include_directories(tttrace
 		PRIVATE $<$<BOOL:${CONFIG_TRACE_BPF}>:${CMAKE_BINARY_DIR}>
 )
