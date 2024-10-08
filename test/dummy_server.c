@@ -36,6 +36,10 @@ static void parse_task(yaml_document_t *doc, yaml_node_t *node, struct sched_inf
 			if (!strcmp(keystr, "name")) {
 				strncpy(tinfo->name, valstr, sizeof(tinfo->name));
 				tinfo->name[sizeof(tinfo->name) - 1] = '\0';
+			} else if (!strcmp(keystr, "priority")) {
+				tinfo->sched_priority = atoi(valstr);
+			} else if (!strcmp(keystr, "policy")) {
+				tinfo->sched_policy = atoi(valstr);
 			} else if (!strcmp(keystr, "period")) {
 				tinfo->period = atoi(valstr);
 			} else if (!strcmp(keystr, "release")) {
@@ -170,11 +174,15 @@ static void serialize_schedinfo(struct sched_info *sinfo)
 	for (struct task_info *t = sinfo->tasks; t; t = t->next) {
 		printf("t->pid: %u\n", t->pid);
 		printf("t->name: %s\n", t->name);
+		printf("t->sched_priority: %u\n", t->sched_priority);
+		printf("t->sched_policy: %u\n", t->sched_policy);
 		printf("t->period: %u\n", t->period);
 		printf("t->release_time: %u\n", t->release_time);
 
 		serialize_int32_t(sbuf, t->pid);
 		serialize_str(sbuf, t->name);
+		serialize_int32_t(sbuf, t->sched_priority);
+		serialize_int32_t(sbuf, t->sched_policy);
 		serialize_int32_t(sbuf, t->period);
 		serialize_int32_t(sbuf, t->release_time);
 		nr_tasks++;

@@ -239,6 +239,8 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 
 		deserialize_int32_t(sbuf, &tinfo->release_time);
 		deserialize_int32_t(sbuf, &tinfo->period);
+		deserialize_int32_t(sbuf, &tinfo->sched_policy);
+		deserialize_int32_t(sbuf, &tinfo->sched_priority);
 		deserialize_str(sbuf, tinfo->name);
 		deserialize_int32_t(sbuf, &tinfo->pid);
 
@@ -248,6 +250,8 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 #if 0
 		printf("tinfo->pid: %u\n", tinfo->pid);
 		printf("tinfo->name: %s\n", tinfo->name);
+		printf("tinfo->sched_priority: %d\n", tinfo->sched_priority);
+		printf("tinfo->sched_policy: %d\n", tinfo->sched_policy);
 		printf("tinfo->period: %d\n", tinfo->period);
 		printf("tinfo->release_time: %d\n", tinfo->release_time);
 #endif
@@ -318,19 +322,27 @@ int main(int argc, char *argv[]) {
 	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
 
 	for (struct task_info *ti = sched_info.tasks; ti; ti = ti->next) {
-		struct time_trigger *tt_node = calloc(1, sizeof(struct time_trigger));
+		struct time_trigger *tt_node;
+		unsigned int pid, priority, policy;
 
 		memset(&sev, 0, sizeof(sev));
 		memset(&its, 0, sizeof(its));
 
+		tt_node = calloc(1, sizeof(struct time_trigger));
 		memcpy(&tt_node->task, ti, sizeof(tt_node->task));
 
-		tt_node->task.pid = get_pid_by_name(tt_node->task.name);
-		if (tt_node->task.pid == -1) {
+		pid = get_pid_by_name(tt_node->task.name);
+		if (pid == -1) {
 			printf("%s is not running !\n", tt_node->task.name);
 			free(tt_node);
 			continue;
 		}
+		priority = tt_node->task.sched_priority;
+		policy = tt_node->task.sched_policy;
+
+		set_schedattr(pid, priority, policy);
+
+		tt_node->task.pid = pid;
 
 		sev.sigev_notify = SIGEV_THREAD;
 		sev.sigev_notify_function = tt_timer;
@@ -343,7 +355,7 @@ int main(int argc, char *argv[]) {
 		its.it_interval.tv_nsec = tt_node->task.period % USEC_PER_SEC * NSEC_PER_USEC;
 
 		printf("%s(%d) period: %d starttimer_ts: %ld interval: %lds %ldns\n",
-				tt_node->task.name, tt_node->task.pid,
+				tt_node->task.name, pid,
 				tt_node->task.period, ts_ns(its.it_value),
 				its.it_interval.tv_sec, its.it_interval.tv_nsec);
 
@@ -359,7 +371,7 @@ int main(int argc, char *argv[]) {
 
 		LIST_INSERT_HEAD(&lh, tt_node, entry);
 
-		bpf_add_pid(tt_node->task.pid);
+		bpf_add_pid(pid);
 	}
 
 	struct time_trigger *tt_p;
