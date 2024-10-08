@@ -1,19 +1,7 @@
-#include <linux/bpf.h>
+#include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
-
-// Common types for bpf and user-space programs
-typedef __u8	uint8_t;
-typedef __u16	uint16_t;
-typedef __u32	uint32_t;
-typedef __u64	uint64_t;
-typedef __s8	int8_t;
-typedef __s16	int16_t;
-typedef __s32	int32_t;
-typedef __s64	int64_t;
-
-typedef int	pid_t;
-typedef __u64	size_t;
+#include <bpf/bpf_core_read.h>
 
 // Include common header file between bpf and user-space programs
 #include "trace_bpf.h"
@@ -56,43 +44,13 @@ struct {
 	__type(value, struct sched_time);
 } sched_switch_map SEC(".maps");
 
-// common trace event format
-struct trace_entry {
-	short unsigned int type;
-	unsigned char flags;
-	unsigned char preempt_count;
-	pid_t pid;
-};
-
-// sched_waking event format
-struct trace_event_sched_waking {
-	struct trace_entry entry;
-
-	char comm[16];
-	pid_t pid;
-	int prio;
-	int target_cpu;
-};
-
-// sched_switch event format
-struct trace_event_sched_switch {
-	struct trace_entry entry;
-
-	char prev_comm[16];
-	pid_t prev_pid;
-	int prev_prio;
-	long prev_state;
-	char next_comm[16];
-	pid_t next_pid;
-	int next_prio;
-};
-
 SEC("tracepoint/sched/sched_waking")
-int handle_sched_waking(struct trace_event_sched_waking *ctx)
+int handle_sched_waking(struct trace_event_raw_sched_wakeup_template *ctx)
 {
 	uint8_t *filtered;
-	pid_t pid = ctx->pid;
+	pid_t pid;
 
+	BPF_CORE_READ_INTO(&pid, ctx, pid);
 	filtered = bpf_map_lookup_elem(&pid_filter_map, &pid);
 	if (!filtered) {
 		return 0;
@@ -102,20 +60,22 @@ int handle_sched_waking(struct trace_event_sched_waking *ctx)
 	struct sched_time data = {};
 	data.ts_wakeup = now;
 	data.pid = pid;
-	data.cpu = ctx->target_cpu;
+	BPF_CORE_READ_INTO(&data.cpu, ctx, target_cpu);
 	bpf_map_update_elem(&sched_waking_map, &pid, &data, BPF_ANY);
 
 	return 0;
 }
 
 SEC("tracepoint/sched/sched_switch")
-int handle_sched_switch(struct trace_event_sched_switch *ctx)
+int handle_sched_switch(struct trace_event_raw_sched_switch *ctx)
 {
-	uint8_t *filtered;
 	uint64_t now = bpf_ktime_get_ns();
+	struct event *e;
+	uint8_t *filtered;
 	struct sched_time *pdata;
-	pid_t pid = ctx->prev_pid;
+	pid_t pid;
 
+	BPF_CORE_READ_INTO(&pid, ctx, prev_pid);
 	pdata = bpf_map_lookup_elem(&sched_switch_map, &pid);
 	if (pdata) {
 		struct schedstat_event *e = bpf_ringbuf_reserve(&buffer, sizeof(struct schedstat_event), 0);
@@ -133,7 +93,7 @@ int handle_sched_switch(struct trace_event_sched_switch *ctx)
 		bpf_map_delete_elem(&sched_switch_map, &pid);
 	}
 
-	pid = ctx->next_pid;
+	BPF_CORE_READ_INTO(&pid, ctx, next_pid);
 	filtered = bpf_map_lookup_elem(&pid_filter_map, &pid);
 	if (filtered) {
 		pdata = bpf_map_lookup_elem(&sched_waking_map, &pid);
