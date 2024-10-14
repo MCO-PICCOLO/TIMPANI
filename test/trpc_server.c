@@ -59,6 +59,11 @@ static void register_callback(const char *name)
 	printf("Register: %s\n", name);
 }
 
+static void dmiss_callback(const char *name, const char *task)
+{
+	printf("Deadline miss: %s @ %s\n", task, name);
+}
+
 static void schedinfo_callback(const char *name, void **buf, size_t *bufsize)
 {
 	printf("SchedInfo: %s\n", name);
@@ -111,6 +116,7 @@ int main(int argc, char *argv[])
 	trpc_server_ops_t ops = {
 		.register_cb = register_callback,
 		.schedinfo_cb = schedinfo_callback,
+		.dmiss_cb = dmiss_callback,
 	};
 	uint32_t port = SERVER_PORT;
 

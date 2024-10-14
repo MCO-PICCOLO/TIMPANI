@@ -103,6 +103,17 @@ static int get_schedinfo(sd_bus *dbus)
 	return 0;
 }
 
+static int report_dmiss(sd_bus *dbus)
+{
+	int ret;
+
+	ret = trpc_client_dmiss(dbus, CLIENT_NAME, "hello1");
+	if (ret < 0) {
+		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
+	}
+	return ret;
+}
+
 int main(int argc, char *argv[])
 {
 	sd_event *event = NULL;
@@ -140,6 +151,11 @@ int main(int argc, char *argv[])
 	}
 
 	ret = get_schedinfo(dbus);
+	if (ret < 0) {
+		goto out;
+	}
+
+	ret = report_dmiss(dbus);
 	if (ret < 0) {
 		goto out;
 	}

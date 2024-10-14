@@ -75,10 +75,29 @@ static int trpc_method_schedinfo(sd_bus_message *m, void *userdata,
 	return sd_bus_message_send(reply_m);
 }
 
+static int trpc_method_dmiss(sd_bus_message *m, void *userdata,
+			sd_bus_error *error)
+{
+	int ret;
+	char *name, *task;
+
+	ret = sd_bus_message_read(m, "ss", &name, &task);
+	if (ret < 0) {
+		LOG_ERROR("%s\n", strerror(-ret));
+		return sd_bus_reply_method_error(m, error);
+	}
+
+	if (trpc_server_ops && trpc_server_ops->dmiss_cb)
+		trpc_server_ops->dmiss_cb(name, task);
+
+	return sd_bus_reply_method_return(m, NULL);
+}
+
 static const sd_bus_vtable trpc_vtable[] = {
 	SD_BUS_VTABLE_START(0),
 	SD_BUS_METHOD(TRPC_METHOD_REGISTER, "s", "", trpc_method_register, 0),
 	SD_BUS_METHOD(TRPC_METHOD_SCHEDINFO, "s", "ay", trpc_method_schedinfo, 0),
+	SD_BUS_METHOD(TRPC_METHOD_DMISS, "ss", "", trpc_method_dmiss, 0),
 	SD_BUS_VTABLE_END
 };
 
@@ -437,6 +456,31 @@ int trpc_client_schedinfo(sd_bus *dbus, const char *name,
 		}
 		memcpy(*buf, r_buf, r_bufsize);
 		*bufsize = r_bufsize;
+	}
+
+cleanup:
+	sd_bus_error_free(&error);
+	if (reply) sd_bus_message_unrefp(&reply);
+
+	return ret;
+}
+
+int trpc_client_dmiss(sd_bus *dbus, const char *name, const char *task)
+{
+	int ret;
+	sd_bus_message *reply = NULL;
+	sd_bus_error error = SD_BUS_ERROR_NULL;
+
+	ret = sd_bus_call_method(dbus,
+				TRPC_SERVER_NAME,
+				TRPC_OBJECT_PATH,
+				TRPC_OBJECT_INTERFACE,
+				TRPC_METHOD_DMISS,
+				&error, &reply,
+				"ss", name, task);
+	if (ret < 0) {
+		LOG_ERROR("%s\n", strerror(-ret));
+		goto cleanup;
 	}
 
 cleanup:

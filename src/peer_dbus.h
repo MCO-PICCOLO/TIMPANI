@@ -18,6 +18,7 @@ extern "C" {
 #define TRPC_OBJECT_INTERFACE	"com.lge.Timpani.Orchestrator"
 #define TRPC_METHOD_REGISTER	"Register"
 #define TRPC_METHOD_SCHEDINFO	"SchedInfo"
+#define TRPC_METHOD_DMISS	"DMiss"
 
 #ifdef __cplusplus
 }

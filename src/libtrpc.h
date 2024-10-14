@@ -15,6 +15,7 @@ extern "C" {
 typedef struct {
 	void (*register_cb)(const char *name);
 	void (*schedinfo_cb)(const char *name, void **buf, size_t *bufsize);
+	void (*dmiss_cb)(const char *name, const char *task);
 } trpc_server_ops_t;
 
 int trpc_server_create(int port, sd_event *event,
@@ -25,6 +26,7 @@ int trpc_client_create(const char *serv_addr, sd_event *event,
 int trpc_client_register(sd_bus *dbus, const char *name);
 int trpc_client_schedinfo(sd_bus *dbus, const char *name,
 			void **buf, size_t *bufsize);
+int trpc_client_dmiss(sd_bus *dbus, const char *name, const char *task);
 
 /*
  * Data serialization stuff
