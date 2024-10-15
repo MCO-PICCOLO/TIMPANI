@@ -222,6 +222,11 @@ static void schedinfo_callback(const char *name, void **buf, size_t *bufsize)
 		*bufsize = sbuf->pos;
 }
 
+static void dmiss_callback(const char *name, const char *task)
+{
+	printf("!!! DEADLINE MISS: %s @ %s !!!\n", task, name);
+}
+
 int main(int argc, char *argv[])
 {
 	sd_event_source *event_source = NULL;
@@ -231,6 +236,7 @@ int main(int argc, char *argv[])
 	trpc_server_ops_t ops = {
 		.register_cb = register_callback,
 		.schedinfo_cb = schedinfo_callback,
+		.dmiss_cb = dmiss_callback,
 	};
 	uint32_t port = SERVER_PORT;
 	const char *sinfo_fname = "schedinfo.yaml";

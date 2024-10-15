@@ -32,6 +32,12 @@ LIST_HEAD(listhead, time_trigger);
 
 static struct sched_info sched_info;
 
+// libtrpc D-Bus variables
+static sd_event *trpc_event;
+static sd_bus *trpc_dbus;
+
+static int report_dmiss(sd_bus *dbus, const char *taskname);
+
 static inline uint64_t timespec_to_ns(const struct timespec *ts)
 {
 	return ((uint64_t) ts->tv_sec * NSEC_PER_SEC) + ts->tv_nsec;
@@ -83,9 +89,11 @@ static void tt_timer(union sigval value) {
 		// Check if this task is still running
 		if (!tt_node->sigwait_enter) {
 			printf("!!! STILL OVERRUN %s(%d): %lu !!!\n", task->name, task->pid, deadline_ns);
+			report_dmiss(trpc_dbus, task->name);
 		// Check if this task meets the deadline
 		} else if (tt_node->sigwait_ts > deadline_ns) {
 			printf("!!! DEADLINE MISS %s(%d): %lu > %lu !!!\n", task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
+			report_dmiss(trpc_dbus, task->name);
 		}
 	}
 #endif
@@ -285,6 +293,13 @@ static int get_schedinfo(sd_bus *dbus)
 	return 0;
 }
 
+static int report_dmiss(sd_bus *dbus, const char *taskname)
+{
+	int ret;
+
+	return trpc_client_dmiss(dbus, "Timpani-N", taskname);
+}
+
 int main(int argc, char *argv[]) {
 	struct sigevent sev;
 	struct timespec starttimer_ts;
@@ -302,16 +317,13 @@ int main(int argc, char *argv[]) {
 
 	LIST_INIT(&lh);
 
-	sd_event *event = NULL;
-	sd_bus *dbus = NULL;
-
 	// Initialze TRPC channel
-	if (init_trpc(&dbus, &event) < 0) {
+	if (init_trpc(&trpc_dbus, &trpc_event) < 0) {
 		return EXIT_FAILURE;
 	}
 
 	// Get Schedule Info
-	if (get_schedinfo(dbus) < 0) {
+	if (get_schedinfo(trpc_dbus) < 0) {
 		return EXIT_FAILURE;
 	}
 
