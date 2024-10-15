@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.5)
 
 # project name and version
 project(timetrigger VERSION 0.1.0 DESCRIPTION "Timpani Time Trigger")
