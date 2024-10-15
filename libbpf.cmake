@@ -1,0 +1,31 @@
+set(LIBBPF_SOURCE_DIR ${CMAKE_SOURCE_DIR}/libbpf/src)
+set(LIBBPF_BINARY_DIR ${CMAKE_BINARY_DIR}/libbpf)
+
+# libbpf library as an external project
+ExternalProject_Add(libbpf
+	PREFIX libbpf
+	SOURCE_DIR ${LIBBPF_SOURCE_DIR}
+	CONFIGURE_COMMAND ""
+	BUILD_COMMAND make
+		OBJDIR=${LIBBPF_BINARY_DIR}/obj
+		DESTDIR=${LIBBPF_BINARY_DIR}
+		INCLUDEDIR=
+		LIBDIR=
+		UAPIDIR=
+		install install_uapi_headers
+	BUILD_IN_SOURCE TRUE
+	INSTALL_COMMAND ""
+	STEP_TARGETS build
+)
+
+# import libbpf as bpf target
+add_library(bpf SHARED IMPORTED)
+set_target_properties(bpf PROPERTIES
+	IMPORTED_LOCATION ${LIBBPF_BINARY_DIR}/libbpf.so
+	INTERFACE_INCLUDE_DIRECTORIES ${LIBBPF_BINARY_DIR}
+)
+# let 'make clean' clean up the whole libbpf output
+set_property(DIRECTORY
+	APPEND
+	PROPERTY ADDITIONAL_CLEAN_FILES ${LIBBPF_BINARY_DIR}
+)
