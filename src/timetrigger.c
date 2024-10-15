@@ -190,7 +190,7 @@ static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
 static inline int schedstat_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
-static int init_trpc(sd_bus **dbus_ret, sd_event **event_ret)
+static int init_trpc(const char *addr, int port, sd_bus **dbus_ret, sd_event **event_ret)
 {
 	int ret;
 	char serv_addr[128];
@@ -200,7 +200,7 @@ static int init_trpc(sd_bus **dbus_ret, sd_event **event_ret)
 		return ret;
 	}
 
-	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", "localhost", 7777);
+	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", addr, port);
 	ret = trpc_client_create(serv_addr, *event_ret, dbus_ret);
 	if (ret < 0) {
 		*event_ret = sd_event_unref(*event_ret);
@@ -301,6 +301,10 @@ static int report_dmiss(sd_bus *dbus, const char *taskname)
 }
 
 int main(int argc, char *argv[]) {
+	int opt;
+	int port = 7777;
+	const char *addr = "localhost";
+
 	struct sigevent sev;
 	struct timespec starttimer_ts;
 	struct itimerspec its;
@@ -311,6 +315,26 @@ int main(int argc, char *argv[]) {
 	bool settimer = false;
 	int traceduration = 10;		// trace in 10 seconds
 
+	while ((opt = getopt(argc, argv, "hp:")) >= 0) {
+		switch (opt) {
+		case 'p':
+			port = atoi(optarg);
+			break;
+		case 'h':
+		default:
+			fprintf(stderr, "Usage: %s [options] [host]\n"
+					"Options:\n"
+					"  -p <port>\tport to connect to\n"
+					"  -h\tshow this help\n",
+					argv[0]);
+			return EXIT_FAILURE;
+		}
+	}
+
+	if (optind < argc) {
+		addr = argv[optind++];
+	}
+
 	int cpu = 3;
 	set_affinity(cpu);
 	set_schedattr(getpid(), 81, SCHED_FIFO);
@@ -318,7 +342,7 @@ int main(int argc, char *argv[]) {
 	LIST_INIT(&lh);
 
 	// Initialze TRPC channel
-	if (init_trpc(&trpc_dbus, &trpc_event) < 0) {
+	if (init_trpc(addr, port, &trpc_dbus, &trpc_event) < 0) {
 		return EXIT_FAILURE;
 	}
 
