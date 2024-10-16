@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # project name and version
-project(libtrpc VERSION 1.0.0 DESCRIPTION "Timpani RPC library")
+project(libtrpc VERSION 1.1.0 DESCRIPTION "Timpani RPC library")
 
 # if pkg-config is not available, run 'sudo apt install pkg-config'
 find_package(PkgConfig REQUIRED)
