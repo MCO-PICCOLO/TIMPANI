@@ -32,6 +32,12 @@ LIST_HEAD(listhead, time_trigger);
 
 static struct sched_info sched_info;
 
+// libtrpc D-Bus variables
+static sd_event *trpc_event;
+static sd_bus *trpc_dbus;
+
+static int report_dmiss(sd_bus *dbus, const char *taskname);
+
 static inline uint64_t timespec_to_ns(const struct timespec *ts)
 {
 	return ((uint64_t) ts->tv_sec * NSEC_PER_SEC) + ts->tv_nsec;
@@ -83,9 +89,11 @@ static void tt_timer(union sigval value) {
 		// Check if this task is still running
 		if (!tt_node->sigwait_enter) {
 			printf("!!! STILL OVERRUN %s(%d): %lu !!!\n", task->name, task->pid, deadline_ns);
+			report_dmiss(trpc_dbus, task->name);
 		// Check if this task meets the deadline
 		} else if (tt_node->sigwait_ts > deadline_ns) {
 			printf("!!! DEADLINE MISS %s(%d): %lu > %lu !!!\n", task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
+			report_dmiss(trpc_dbus, task->name);
 		}
 	}
 #endif
@@ -182,7 +190,7 @@ static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
 static inline int schedstat_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
-static int init_trpc(sd_bus **dbus_ret, sd_event **event_ret)
+static int init_trpc(const char *addr, int port, sd_bus **dbus_ret, sd_event **event_ret)
 {
 	int ret;
 	char serv_addr[128];
@@ -192,7 +200,7 @@ static int init_trpc(sd_bus **dbus_ret, sd_event **event_ret)
 		return ret;
 	}
 
-	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", "localhost", 7777);
+	snprintf(serv_addr, sizeof(serv_addr), "tcp:host=%s,port=%u", addr, port);
 	ret = trpc_client_create(serv_addr, *event_ret, dbus_ret);
 	if (ret < 0) {
 		*event_ret = sd_event_unref(*event_ret);
@@ -285,7 +293,18 @@ static int get_schedinfo(sd_bus *dbus)
 	return 0;
 }
 
+static int report_dmiss(sd_bus *dbus, const char *taskname)
+{
+	int ret;
+
+	return trpc_client_dmiss(dbus, "Timpani-N", taskname);
+}
+
 int main(int argc, char *argv[]) {
+	int opt;
+	int port = 7777;
+	const char *addr = "localhost";
+
 	struct sigevent sev;
 	struct timespec starttimer_ts;
 	struct itimerspec its;
@@ -296,22 +315,39 @@ int main(int argc, char *argv[]) {
 	bool settimer = false;
 	int traceduration = 10;		// trace in 10 seconds
 
+	while ((opt = getopt(argc, argv, "hp:")) >= 0) {
+		switch (opt) {
+		case 'p':
+			port = atoi(optarg);
+			break;
+		case 'h':
+		default:
+			fprintf(stderr, "Usage: %s [options] [host]\n"
+					"Options:\n"
+					"  -p <port>\tport to connect to\n"
+					"  -h\tshow this help\n",
+					argv[0]);
+			return EXIT_FAILURE;
+		}
+	}
+
+	if (optind < argc) {
+		addr = argv[optind++];
+	}
+
 	int cpu = 3;
 	set_affinity(cpu);
 	set_schedattr(getpid(), 81, SCHED_FIFO);
 
 	LIST_INIT(&lh);
 
-	sd_event *event = NULL;
-	sd_bus *dbus = NULL;
-
 	// Initialze TRPC channel
-	if (init_trpc(&dbus, &event) < 0) {
+	if (init_trpc(addr, port, &trpc_dbus, &trpc_event) < 0) {
 		return EXIT_FAILURE;
 	}
 
 	// Get Schedule Info
-	if (get_schedinfo(dbus) < 0) {
+	if (get_schedinfo(trpc_dbus) < 0) {
 		return EXIT_FAILURE;
 	}
 
