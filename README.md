@@ -10,13 +10,18 @@
 
 ## Prerequisites
 
-libbpf-dev and linux-tools(bpftool) required for bpf feature
+libelf-dev and zlib1g-dev required for libbpf submodule
+> NOTE: libbpf has been integrated as a git submodule since [CO-RE feature merge](http://mod.lge.com/hub/timpani/time-trigger/-/commit/c4cddcdbfb337c60579014c9f88f56055edf2b38)
 ```
-sudo apt install -y libbpf-dev
+sudo apt install -y libelf-dev zlib1g-dev
+```
+
+linux-tools(bpftool) required for bpf feature
+```
 sudo apt install -y linux-tools-$(uname -r)
 ```
 
-pkg-config and libsystemd-dev required for libtrpc feature
+pkg-config and libsystemd-dev required for libtrpc submodule
 ```
 sudo apt install -y pkg-config
 sudo apt install -y libsystemd-dev
