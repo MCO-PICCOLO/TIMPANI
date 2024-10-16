@@ -8,6 +8,9 @@ endif()
 
 set(VMLINUX_H_DIR ${CMAKE_SOURCE_DIR}/src/bpf/${BPF_ARCH})
 set(BPF_INCLUDES ${BPF_INCLUDES} -I${VMLINUX_H_DIR})
+if(LIBBPF_BINARY_DIR)
+	set(BPF_INCLUDES ${BPF_INCLUDES} -I${LIBBPF_BINARY_DIR})
+endif()
 
 # ADD_BPF macro
 macro(ADD_BPF Loader Input Output OutputSkel)
