@@ -16,8 +16,9 @@ libelf-dev and zlib1g-dev required for libbpf submodule
 sudo apt install -y libelf-dev zlib1g-dev
 ```
 
-linux-tools(bpftool) required for bpf feature
+clang and linux-tools(bpftool) required for bpf feature
 ```
+sudo apt install -y clang
 sudo apt install -y linux-tools-$(uname -r)
 ```
 
