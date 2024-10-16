@@ -106,12 +106,17 @@ static int get_schedinfo(sd_bus *dbus)
 static int report_dmiss(sd_bus *dbus)
 {
 	int ret;
+	char cmd[256];
 
-	ret = trpc_client_dmiss(dbus, CLIENT_NAME, "hello1");
+	ret = trpc_client_dmiss(dbus, CLIENT_NAME, "hello1", cmd, sizeof(cmd));
 	if (ret < 0) {
 		fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
+		return ret;
 	}
-	return ret;
+
+	printf("command from server: %s\n", cmd);
+
+	return 0;
 }
 
 int main(int argc, char *argv[])
