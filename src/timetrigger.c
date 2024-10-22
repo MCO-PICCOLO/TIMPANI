@@ -36,6 +36,7 @@ static struct sched_info sched_info;
 static sd_event *trpc_event;
 static sd_bus *trpc_dbus;
 
+static void remove_tt_node(struct time_trigger *tt_node);
 static int report_dmiss(sd_bus *dbus, const char *taskname);
 
 static inline uint64_t timespec_to_ns(const struct timespec *ts)
@@ -293,6 +294,12 @@ static int get_schedinfo(sd_bus *dbus)
 	return 0;
 }
 
+static void remove_tt_node(struct time_trigger *tt_node) {
+	timer_delete(tt_node->timer);
+	LIST_REMOVE(tt_node, entry);
+	free(tt_node);
+}
+
 static int report_dmiss(sd_bus *dbus, const char *taskname)
 {
 	int ret;
@@ -429,8 +436,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	LIST_FOREACH(tt_p, &lh, entry) {
-		timer_delete(tt_p->timer);
-		free(tt_p);
+		remove_tt_node(tt_p);
 	}
 
 	if (settimer) {
