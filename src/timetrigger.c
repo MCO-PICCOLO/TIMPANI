@@ -312,9 +312,7 @@ int main(int argc, char *argv[]) {
 	int port = 7777;
 	const char *addr = "localhost";
 
-	struct sigevent sev;
 	struct timespec starttimer_ts;
-	struct itimerspec its;
 	struct listhead lh;
 
 	timer_t tracetimer;
@@ -362,14 +360,10 @@ int main(int argc, char *argv[]) {
 	tracer_on();
 	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
 
-	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
-
+	// Initialize time_trigger linked list
 	for (struct task_info *ti = sched_info.tasks; ti; ti = ti->next) {
 		struct time_trigger *tt_node;
 		unsigned int pid, priority, policy;
-
-		memset(&sev, 0, sizeof(sev));
-		memset(&its, 0, sizeof(its));
 
 		tt_node = calloc(1, sizeof(struct time_trigger));
 		memcpy(&tt_node->task, ti, sizeof(tt_node->task));
@@ -387,37 +381,49 @@ int main(int argc, char *argv[]) {
 
 		tt_node->task.pid = pid;
 
-		sev.sigev_notify = SIGEV_THREAD;
-		sev.sigev_notify_function = tt_timer;
-
-		sev.sigev_value.sival_ptr = tt_node;
-
-		its.it_value.tv_sec = starttimer_ts.tv_sec;
-		its.it_value.tv_nsec = starttimer_ts.tv_nsec + 5000000;
-		its.it_interval.tv_sec = tt_node->task.period / USEC_PER_SEC;
-		its.it_interval.tv_nsec = tt_node->task.period % USEC_PER_SEC * NSEC_PER_USEC;
-
-		printf("%s(%d) period: %d starttimer_ts: %ld interval: %lds %ldns\n",
-				tt_node->task.name, pid,
-				tt_node->task.period, ts_ns(its.it_value),
-				its.it_interval.tv_sec, its.it_interval.tv_nsec);
-
-		if (timer_create(CLOCK_MONOTONIC, &sev, &tt_node->timer)) {
-			perror("Failed to create timer");
-			return EXIT_FAILURE;
-		}
-
-		if (timer_settime(tt_node->timer, TIMER_ABSTIME, &its, NULL)) {
-			perror("Failed to start timer");
-			return EXIT_FAILURE;
-		}
-
 		LIST_INSERT_HEAD(&lh, tt_node, entry);
 
 		bpf_add_pid(pid);
 	}
 
+	// Setup and start hrtimers for tasks
 	struct time_trigger *tt_p;
+
+	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
+
+	LIST_FOREACH(tt_p, &lh, entry) {
+		struct itimerspec its;
+		struct sigevent sev;
+
+		memset(&sev, 0, sizeof(sev));
+		memset(&its, 0, sizeof(its));
+
+		sev.sigev_notify = SIGEV_THREAD;
+		sev.sigev_notify_function = tt_timer;
+
+		sev.sigev_value.sival_ptr = tt_p;
+
+		its.it_value.tv_sec = starttimer_ts.tv_sec;
+		its.it_value.tv_nsec = starttimer_ts.tv_nsec + 5000000;
+		its.it_interval.tv_sec = tt_p->task.period / USEC_PER_SEC;
+		its.it_interval.tv_nsec = tt_p->task.period % USEC_PER_SEC * NSEC_PER_USEC;
+
+		printf("%s(%d) period: %d starttimer_ts: %ld interval: %lds %ldns\n",
+				tt_p->task.name, tt_p->task.pid,
+				tt_p->task.period, ts_ns(its.it_value),
+				its.it_interval.tv_sec, its.it_interval.tv_nsec);
+
+		if (timer_create(CLOCK_MONOTONIC, &sev, &tt_p->timer)) {
+			perror("Failed to create timer");
+			return EXIT_FAILURE;
+		}
+
+		if (timer_settime(tt_p->timer, TIMER_ABSTIME, &its, NULL)) {
+			perror("Failed to start timer");
+			return EXIT_FAILURE;
+		}
+	}
+
 	LIST_FOREACH(tt_p, &lh, entry)
 		printf("TT will wake up Process %s(%d) with duration %d us and release_time %d\n",
 				tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time);
