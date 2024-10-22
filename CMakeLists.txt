@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.6)
 
 # project name and version
 project(sample_apps VERSION 0.1.0 DESCRIPTION "Timpani Sample Apps")
@@ -18,3 +18,4 @@ target_include_directories(sample_apps
 target_compile_options(sample_apps
 		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
 )
+target_link_libraries(sample_apps PUBLIC m)
