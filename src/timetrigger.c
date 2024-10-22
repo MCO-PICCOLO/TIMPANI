@@ -25,6 +25,7 @@ struct time_trigger {
 	uint64_t sigwait_ts;
 	uint8_t sigwait_enter;
 #endif
+	struct timespec prev_timer;
 	LIST_ENTRY(time_trigger) entry;
 };
 
@@ -39,32 +40,6 @@ static sd_bus *trpc_dbus;
 static void remove_tt_node(struct time_trigger *tt_node);
 static int report_dmiss(sd_bus *dbus, const char *taskname);
 
-static inline uint64_t timespec_to_ns(const struct timespec *ts)
-{
-	return ((uint64_t) ts->tv_sec * NSEC_PER_SEC) + ts->tv_nsec;
-}
-
-static inline uint64_t timespec_to_us(const struct timespec *ts)
-{
-	return ((uint64_t) ts->tv_sec * USEC_PER_SEC) + ts->tv_nsec / NSEC_PER_USEC;
-}
-
-static inline struct timespec ns_to_timespec(const uint64_t ns)
-{
-	struct timespec ts;
-	ts.tv_sec = ns / NSEC_PER_SEC;
-	ts.tv_nsec = ns % NSEC_PER_SEC;
-	return ts;
-}
-
-static inline struct timespec us_to_timespec(const uint64_t us)
-{
-	struct timespec ts;
-	ts.tv_sec = us / USEC_PER_SEC;
-	ts.tv_nsec = (us % USEC_PER_SEC) * NSEC_PER_USEC;
-	return ts;
-}
-
 // TT Handler function executed upon timer expiration based on each period
 static void tt_timer(union sigval value) {
 	struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
@@ -72,20 +47,19 @@ static void tt_timer(union sigval value) {
 	struct timespec before, after;
 
 	clock_gettime(CLOCK_MONOTONIC, &before);
-	write_trace_marker("Timer expired: now: %lld \n", ts_ns(before));
+	write_trace_marker("%s: Timer expired: now: %lld, diff: %lld\n",
+			task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer));
 
 	// If a task has its own release time, do nanosleep
 	if (task->release_time) {
-		struct timespec ts;
-		ts.tv_sec = task->release_time / USEC_PER_SEC;
-		ts.tv_nsec = task->release_time % USEC_PER_SEC * NSEC_PER_USEC;
+		struct timespec ts = us_ts(task->release_time);
 		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL);
 	}
 
 #ifdef CONFIG_TRACE_BPF
 	/* Check whether there is a deadline miss or not */
 	if (tt_node->sigwait_ts) {
-		uint64_t deadline_ns = timespec_to_ns(&before);
+		uint64_t deadline_ns = ts_ns(before);
 
 		// Check if this task is still running
 		if (!tt_node->sigwait_enter) {
@@ -93,18 +67,23 @@ static void tt_timer(union sigval value) {
 			report_dmiss(trpc_dbus, task->name);
 		// Check if this task meets the deadline
 		} else if (tt_node->sigwait_ts > deadline_ns) {
-			printf("!!! DEADLINE MISS %s(%d): %lu > %lu !!!\n", task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
+			printf("!!! DEADLINE MISS %s(%d): %lu > %lu !!!\n",
+				task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
+			write_trace_marker("%s: Deadline miss: %lu diff\n",
+				task->name, tt_node->sigwait_ts - deadline_ns);
 			report_dmiss(trpc_dbus, task->name);
 		}
 	}
 #endif
 
 	clock_gettime(CLOCK_MONOTONIC, &after);
-	write_trace_marker("Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us \n",
-			SIGNO_TT, task->pid, ts_ns(after), ( diff( ts_ns(after), ts_ns(before) ) / NSEC_PER_USEC ));
+	write_trace_marker("%s: Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us \n",
+			task->name, SIGNO_TT, task->pid, ts_ns(after), ( ts_diff(after, before) / NSEC_PER_USEC ));
 
 	// Send the signal to the target process
 	kill(task->pid, SIGNO_TT);
+
+	tt_node->prev_timer = before;
 }
 
 static void sighan_stoptracer(int signo, siginfo_t *info, void *context) {
