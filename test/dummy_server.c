@@ -44,6 +44,8 @@ static void parse_task(yaml_document_t *doc, yaml_node_t *node, struct sched_inf
 				tinfo->period = atoi(valstr);
 			} else if (!strcmp(keystr, "release")) {
 				tinfo->release_time = atoi(valstr);
+			} else if (!strcmp(keystr, "allowable_dmisses")) {
+				tinfo->allowable_deadline_misses = atoi(valstr);
 			}
 		}
 	}
@@ -178,6 +180,7 @@ static void serialize_schedinfo(struct sched_info *sinfo)
 		printf("t->sched_policy: %u\n", t->sched_policy);
 		printf("t->period: %u\n", t->period);
 		printf("t->release_time: %u\n", t->release_time);
+		printf("t->allowable_deadline_misses: %u\n", t->allowable_deadline_misses);
 
 		serialize_int32_t(sbuf, t->pid);
 		serialize_str(sbuf, t->name);
@@ -185,6 +188,7 @@ static void serialize_schedinfo(struct sched_info *sinfo)
 		serialize_int32_t(sbuf, t->sched_policy);
 		serialize_int32_t(sbuf, t->period);
 		serialize_int32_t(sbuf, t->release_time);
+		serialize_int32_t(sbuf, t->allowable_deadline_misses);
 		nr_tasks++;
 	}
 

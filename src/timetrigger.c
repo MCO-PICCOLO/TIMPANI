@@ -243,6 +243,7 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 			return -1;
 		}
 
+		deserialize_int32_t(sbuf, &tinfo->allowable_deadline_misses);
 		deserialize_int32_t(sbuf, &tinfo->release_time);
 		deserialize_int32_t(sbuf, &tinfo->period);
 		deserialize_int32_t(sbuf, &tinfo->sched_policy);
@@ -260,6 +261,7 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 		printf("tinfo->sched_policy: %d\n", tinfo->sched_policy);
 		printf("tinfo->period: %d\n", tinfo->period);
 		printf("tinfo->release_time: %d\n", tinfo->release_time);
+		printf("tinfo->allowable_deadline_misses: %d\n", tinfo->allowable_deadline_misses);
 #endif
 	}
 
@@ -458,8 +460,8 @@ int main(int argc, char *argv[])
 
 	struct time_trigger *tt_p;
 	LIST_FOREACH(tt_p, &lh, entry)
-		printf("TT will wake up Process %s(%d) with duration %d us and release_time %d\n",
-				tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time);
+		printf("TT will wake up Process %s(%d) with duration %d us, release_time %d, allowable_deadline_misses: %d\n",
+				tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time, tt_p->task.allowable_deadline_misses);
 
 	// The process will wait forever until it receives a signal from the handler
 	while (1) {

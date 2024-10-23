@@ -12,6 +12,7 @@ struct task_info {
 	uint32_t sched_policy;
 	uint32_t period;
 	uint32_t release_time;
+	uint32_t allowable_deadline_misses;
 	struct task_info *next;
 };
 

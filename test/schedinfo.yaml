@@ -4,13 +4,16 @@ tasks:
     policy: 1
     period: 10000
     release: 1000
+    allowable_dmisses: 5
   - name: wakee2
     priority: 80
     policy: 1
     period: 50000
     release: 5000
+    allowable_dmisses: 0
   - name: wakee3
     priority: 80
     policy: 1
     period: 20000
     release: 2000
+    allowable_dmisses: 10
