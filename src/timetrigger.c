@@ -453,6 +453,7 @@ int main(int argc, char *argv[])
 	}
 
 	LIST_FOREACH(tt_p, &lh, entry) {
+		bpf_del_pid(tt_p->task.pid);
 		remove_tt_node(tt_p);
 	}
 

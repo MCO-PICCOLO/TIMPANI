@@ -19,13 +19,19 @@
 
 #include "libtttrace.h"
 
-static struct sigwait_bpf *sigwait;
-static struct ring_buffer *sigwait_rb;
-static pthread_t sigwait_rb_thread;
+#define RB_TIMEOUT_MS		100
 
-static struct schedstat_bpf *schedstat;
-static struct ring_buffer *schedstat_rb;
-static pthread_t schedstat_rb_thread;
+typedef struct {
+	struct ring_buffer *rb;
+	pthread_t thread;
+	int need_exit;
+} rb_data_t;
+
+static struct sigwait_bpf *sigwait_bpf;
+static rb_data_t sigwait_rb_data;
+
+static struct schedstat_bpf *schedstat_bpf;
+static rb_data_t schedstat_rb_data;
 
 static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 			   va_list args)
@@ -37,9 +43,10 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 static void *rb_thread_func(void *arg)
 {
 	int ret;
+	rb_data_t *rb_data = (rb_data_t *)arg;
 
-	while (1) {
-		ret = ring_buffer__poll((struct ring_buffer *)arg, -1);
+	while (!rb_data->need_exit) {
+		ret = ring_buffer__poll(rb_data->rb, RB_TIMEOUT_MS);
 		if (ret < 0 && ret != -EINTR) {
 			fprintf(stderr, "Error ring_buffer__poll: %d\n", ret);
 			break;
@@ -53,31 +60,31 @@ static int start_sigwait_bpf(ring_buffer_sample_fn sigwait_cb, void *ctx)
 {
 	int ret;
 
-	sigwait = sigwait_bpf__open();
-	if (!sigwait) {
+	sigwait_bpf = sigwait_bpf__open();
+	if (!sigwait_bpf) {
 		fprintf(stderr, "Error bpf__open\n");
 		goto fail;
 	}
 
-	ret = sigwait_bpf__load(sigwait);
+	ret = sigwait_bpf__load(sigwait_bpf);
 	if (ret < 0) {
 		fprintf(stderr, "Error bpf__load\n");
 		goto fail;
 	}
 
-	sigwait_rb = ring_buffer__new(bpf_map__fd(sigwait->maps.buffer), sigwait_cb, ctx, NULL);
-	if (!sigwait_rb) {
+	sigwait_rb_data.rb = ring_buffer__new(bpf_map__fd(sigwait_bpf->maps.buffer), sigwait_cb, ctx, NULL);
+	if (!sigwait_rb_data.rb) {
 		fprintf(stderr, "Error creating ring buffer\n");
 		goto fail;
 	}
 
-	ret = sigwait_bpf__attach(sigwait);
+	ret = sigwait_bpf__attach(sigwait_bpf);
 	if (ret < 0) {
 		fprintf(stderr, "Error bpf__attach\n");
 		goto fail;
 	}
 
-	if (pthread_create(&sigwait_rb_thread, NULL, rb_thread_func, (void *)sigwait_rb)) {
+	if (pthread_create(&sigwait_rb_data.thread, NULL, rb_thread_func, (void *)&sigwait_rb_data)) {
 		fprintf(stderr, "Error pthread_create\n");
 		goto fail;
 	}
@@ -85,10 +92,14 @@ static int start_sigwait_bpf(ring_buffer_sample_fn sigwait_cb, void *ctx)
 	return 0;
 
 fail:
-	if (sigwait_rb)
-		ring_buffer__free(sigwait_rb);
-	if (sigwait)
-		sigwait_bpf__destroy(sigwait);
+	if (sigwait_rb_data.rb) {
+		ring_buffer__free(sigwait_rb_data.rb);
+		sigwait_rb_data.rb = NULL;
+	}
+	if (sigwait_bpf) {
+		sigwait_bpf__destroy(sigwait_bpf);
+		sigwait_bpf = NULL;
+	}
 	return ret;
 }
 
@@ -97,31 +108,31 @@ static int start_schedstat_bpf(ring_buffer_sample_fn schedstat_cb, void *ctx)
 {
 	int ret;
 
-	schedstat = schedstat_bpf__open();
-	if (!schedstat) {
+	schedstat_bpf = schedstat_bpf__open();
+	if (!schedstat_bpf) {
 		fprintf(stderr, "Error bpf__open\n");
 		goto fail;
 	}
 
-	ret = schedstat_bpf__load(schedstat);
+	ret = schedstat_bpf__load(schedstat_bpf);
 	if (ret < 0) {
 		fprintf(stderr, "Error bpf__load\n");
 		goto fail;
 	}
 
-	schedstat_rb = ring_buffer__new(bpf_map__fd(schedstat->maps.buffer), schedstat_cb, ctx, NULL);
-	if (!schedstat_rb) {
+	schedstat_rb_data.rb = ring_buffer__new(bpf_map__fd(schedstat_bpf->maps.buffer), schedstat_cb, ctx, NULL);
+	if (!schedstat_rb_data.rb) {
 		fprintf(stderr, "Error creating ring buffer\n");
 		goto fail;
 	}
 
-	ret = schedstat_bpf__attach(schedstat);
+	ret = schedstat_bpf__attach(schedstat_bpf);
 	if (ret < 0) {
 		fprintf(stderr, "Error bpf__attach\n");
 		goto fail;
 	}
 
-	if (pthread_create(&schedstat_rb_thread, NULL, rb_thread_func, (void *)schedstat_rb)) {
+	if (pthread_create(&schedstat_rb_data.thread, NULL, rb_thread_func, (void *)&schedstat_rb_data)) {
 		fprintf(stderr, "Error pthread_create\n");
 		goto fail;
 	}
@@ -129,10 +140,14 @@ static int start_schedstat_bpf(ring_buffer_sample_fn schedstat_cb, void *ctx)
 	return 0;
 
 fail:
-	if (schedstat_rb)
-		ring_buffer__free(schedstat_rb);
-	if (schedstat)
-		schedstat_bpf__destroy(schedstat);
+	if (schedstat_rb_data.rb) {
+		ring_buffer__free(schedstat_rb_data.rb);
+		schedstat_rb_data.rb = NULL;
+	}
+	if (schedstat_bpf) {
+		schedstat_bpf__destroy(schedstat_bpf);
+		schedstat_bpf = NULL;
+	}
 	return ret;
 }
 #endif /* CONFIG_TRACE_BPF_EVENT */
@@ -164,7 +179,31 @@ fail:
 
 void bpf_off(void)
 {
+	if (sigwait_bpf) {
+		sigwait_rb_data.need_exit = 1;
+		pthread_join(sigwait_rb_data.thread, NULL);
 
+		if (sigwait_rb_data.rb) {
+			ring_buffer__free(sigwait_rb_data.rb);
+			sigwait_rb_data.rb = NULL;
+		}
+
+		sigwait_bpf__destroy(sigwait_bpf);
+		sigwait_bpf = NULL;
+	}
+
+	if (schedstat_bpf) {
+		schedstat_rb_data.need_exit = 1;
+		pthread_join(schedstat_rb_data.thread, NULL);
+
+		if (schedstat_rb_data.rb) {
+			ring_buffer__free(schedstat_rb_data.rb);
+			schedstat_rb_data.rb = NULL;
+		}
+
+		schedstat_bpf__destroy(schedstat_bpf);
+		schedstat_bpf = NULL;
+	}
 }
 
 int bpf_add_pid(int pid)
@@ -172,19 +211,42 @@ int bpf_add_pid(int pid)
 	uint8_t value = 1;
 
 	// Check if sigwait BPF feature is initialized
-	if (!sigwait) return -1;
+	if (!sigwait_bpf) return -1;
 
-	if (bpf_map_update_elem(bpf_map__fd(sigwait->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
+	if (bpf_map_update_elem(bpf_map__fd(sigwait_bpf->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
 		fprintf(stderr, "Error adding PID %d to pid_filter_map\n", pid);
 		return -1;
 	}
 
 #ifdef CONFIG_TRACE_BPF_EVENT
 	// Check if schedstat BPF feature is initialized
-	if (!schedstat) return -1;
+	if (!schedstat_bpf) return -1;
 
-	if (bpf_map_update_elem(bpf_map__fd(schedstat->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
+	if (bpf_map_update_elem(bpf_map__fd(schedstat_bpf->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
 		fprintf(stderr, "Error adding PID %d to pid_filter_map\n", pid);
+		return -1;
+	}
+#endif
+
+	return 0;
+}
+
+int bpf_del_pid(int pid)
+{
+	// Check if sigwait BPF feature is initialized
+	if (!sigwait_bpf) return -1;
+
+	if (bpf_map_delete_elem(bpf_map__fd(sigwait_bpf->maps.pid_filter_map), &pid)) {
+		fprintf(stderr, "Error deleting PID %d from pid_filter_map\n", pid);
+		return -1;
+	}
+
+#ifdef CONFIG_TRACE_BPF_EVENT
+	// Check if schedstat BPF feature is initialized
+	if (!schedstat_bpf) return -1;
+
+	if (bpf_map_delete_elem(bpf_map__fd(schedstat_bpf->maps.pid_filter_map), &pid)) {
+		fprintf(stderr, "Error deleting PID %d from pid_filter_map\n", pid);
 		return -1;
 	}
 #endif

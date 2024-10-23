@@ -24,12 +24,14 @@ int bpf_on(ring_buffer_sample_fn sigwait_cb,
 	void *ctx);
 void bpf_off(void);
 int bpf_add_pid(int pid);
+int bpf_del_pid(int pid);
 #else
 static inline int bpf_on(ring_buffer_sample_fn sigwait_cb,
 	ring_buffer_sample_fn schedstat_cb,
 	void *ctx) { return 0; }
 static inline void bpf_off(void) {}
 static inline int bpf_add_pid(int pid) { return 0; }
+static inline int bpf_del_pid(int pid) { return 0; }
 #endif /* CONFIG_TRACE_BPF */
 
 #ifdef __cplusplus
