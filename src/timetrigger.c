@@ -40,6 +40,12 @@ static sd_bus *trpc_dbus;
 static void remove_tt_node(struct time_trigger *tt_node);
 static int report_dmiss(sd_bus *dbus, const char *taskname);
 
+// default option values
+int cpu = -1;
+int prio = -1;
+int port = 7777;
+const char *addr = "localhost";
+
 // TT Handler function executed upon timer expiration based on each period
 static void tt_timer(union sigval value) {
 	struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
@@ -298,19 +304,27 @@ static int report_dmiss(sd_bus *dbus, const char *taskname)
 	return trpc_client_dmiss(dbus, "Timpani-N", taskname);
 }
 
-static int get_options(int argc, char *argv[], int *port_ptr, const char **addr_ptr)
+static int get_options(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hp:")) >= 0) {
+	while ((opt = getopt(argc, argv, "hc:P:p:")) >= 0) {
 		switch (opt) {
+		case 'c':
+			cpu = atoi(optarg);
+			break;
+		case 'P':
+			prio = atoi(optarg);
+			break;
 		case 'p':
-			*port_ptr = atoi(optarg);
+			port = atoi(optarg);
 			break;
 		case 'h':
 		default:
 			fprintf(stderr, "Usage: %s [options] [host]\n"
 					"Options:\n"
+					"  -c <cpu_num>\tcpu affinity for timetrigger\n"
+					"  -P <prio>\tRT priority (1~99) for timetrigger\n"
 					"  -p <port>\tport to connect to\n"
 					"  -h\tshow this help\n",
 					argv[0]);
@@ -319,7 +333,7 @@ static int get_options(int argc, char *argv[], int *port_ptr, const char **addr_
 	}
 
 	if (optind < argc) {
-		*addr_ptr = argv[optind++];
+		addr = argv[optind++];
 	}
 	return 0;
 }
@@ -399,9 +413,6 @@ static int start_tt_timer(struct listhead *lh_ptr)
 
 int main(int argc, char *argv[])
 {
-	int port = 7777;
-	const char *addr = "localhost";
-
 	struct listhead lh;
 
 	timer_t tracetimer;
@@ -409,13 +420,16 @@ int main(int argc, char *argv[])
 	bool settimer = false;
 	int traceduration = 10;		// trace in 10 seconds
 
-	if (get_options(argc, argv, &port, &addr) < 0) {
+	if (get_options(argc, argv) < 0) {
 		return EXIT_FAILURE;
 	}
 
-	int cpu = 3;
-	set_affinity(cpu);
-	set_schedattr(getpid(), 81, SCHED_FIFO);
+	if (cpu != -1) {
+		set_affinity(cpu);
+	}
+	if (prio > 0 && prio <= 99) {
+		set_schedattr(getpid(), prio, SCHED_FIFO);
+	}
 
 	// Initialze TRPC channel
 	if (init_trpc(addr, port, &trpc_dbus, &trpc_event) < 0) {
