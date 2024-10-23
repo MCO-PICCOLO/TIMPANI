@@ -86,6 +86,7 @@ static void tt_timer(union sigval value) {
 	tt_node->prev_timer = before;
 }
 
+#ifdef CONFIG_TRACE_EVENT
 static void sighan_stoptracer(int signo, siginfo_t *info, void *context) {
 	struct timespec now;
 
@@ -98,6 +99,14 @@ static void sighan_stoptracer(int signo, siginfo_t *info, void *context) {
 static bool set_stoptracer_timer(int duration, timer_t *timer) {
 	struct sigevent sev = {};
 	struct itimerspec its = {};
+	struct sigaction sa = {};
+
+	sa.sa_flags = SA_SIGINFO;
+	sa.sa_sigaction = &sighan_stoptracer;
+	if (sigaction(SIGNO_STOPTRACER, &sa, NULL) == -1) {
+		perror("Failed to set up signal handler");
+		return false;
+	}
 
 	sev.sigev_notify = SIGEV_SIGNAL;
 	sev.sigev_signo = SIGNO_STOPTRACER;
@@ -118,6 +127,9 @@ static bool set_stoptracer_timer(int duration, timer_t *timer) {
 	}
 	return true;
 }
+#else
+static inline bool set_stoptracer_timer(int duration, timer_t *timer) { return false; }
+#endif
 
 #ifdef CONFIG_TRACE_BPF
 static int sigwait_bpf_callback(void *ctx, void *data, size_t len)
@@ -286,23 +298,14 @@ static int report_dmiss(sd_bus *dbus, const char *taskname)
 	return trpc_client_dmiss(dbus, "Timpani-N", taskname);
 }
 
-int main(int argc, char *argv[]) {
+static int get_options(int argc, char *argv[], int *port_ptr, const char **addr_ptr)
+{
 	int opt;
-	int port = 7777;
-	const char *addr = "localhost";
-
-	struct timespec starttimer_ts;
-	struct listhead lh;
-
-	timer_t tracetimer;
-
-	bool settimer = false;
-	int traceduration = 10;		// trace in 10 seconds
 
 	while ((opt = getopt(argc, argv, "hp:")) >= 0) {
 		switch (opt) {
 		case 'p':
-			port = atoi(optarg);
+			*port_ptr = atoi(optarg);
 			break;
 		case 'h':
 		default:
@@ -311,35 +314,20 @@ int main(int argc, char *argv[]) {
 					"  -p <port>\tport to connect to\n"
 					"  -h\tshow this help\n",
 					argv[0]);
-			return EXIT_FAILURE;
+			return -1;
 		}
 	}
 
 	if (optind < argc) {
-		addr = argv[optind++];
+		*addr_ptr = argv[optind++];
 	}
+	return 0;
+}
 
-	int cpu = 3;
-	set_affinity(cpu);
-	set_schedattr(getpid(), 81, SCHED_FIFO);
+void init_time_trigger_list(struct listhead *lh_ptr)
+{
+	LIST_INIT(lh_ptr);
 
-	LIST_INIT(&lh);
-
-	// Initialze TRPC channel
-	if (init_trpc(addr, port, &trpc_dbus, &trpc_event) < 0) {
-		return EXIT_FAILURE;
-	}
-
-	// Get Schedule Info
-	if (get_schedinfo(trpc_dbus) < 0) {
-		return EXIT_FAILURE;
-	}
-
-	settimer = set_stoptracer_timer(traceduration, &tracetimer);
-	tracer_on();
-	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
-
-	// Initialize time_trigger linked list
 	for (struct task_info *ti = sched_info.tasks; ti; ti = ti->next) {
 		struct time_trigger *tt_node;
 		unsigned int pid, priority, policy;
@@ -360,17 +348,20 @@ int main(int argc, char *argv[]) {
 
 		tt_node->task.pid = pid;
 
-		LIST_INSERT_HEAD(&lh, tt_node, entry);
+		LIST_INSERT_HEAD(lh_ptr, tt_node, entry);
 
 		bpf_add_pid(pid);
 	}
+}
 
-	// Setup and start hrtimers for tasks
+static int start_tt_timer(struct listhead *lh_ptr)
+{
 	struct time_trigger *tt_p;
+	struct timespec starttimer_ts;
 
 	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
 
-	LIST_FOREACH(tt_p, &lh, entry) {
+	LIST_FOREACH(tt_p, lh_ptr, entry) {
 		struct itimerspec its;
 		struct sigevent sev;
 
@@ -394,26 +385,67 @@ int main(int argc, char *argv[]) {
 
 		if (timer_create(CLOCK_MONOTONIC, &sev, &tt_p->timer)) {
 			perror("Failed to create timer");
-			return EXIT_FAILURE;
+			return -1;
 		}
 
 		if (timer_settime(tt_p->timer, TIMER_ABSTIME, &its, NULL)) {
 			perror("Failed to start timer");
-			return EXIT_FAILURE;
+			return -1;
 		}
 	}
 
+	return 0;
+}
+
+int main(int argc, char *argv[])
+{
+	int port = 7777;
+	const char *addr = "localhost";
+
+	struct listhead lh;
+
+	timer_t tracetimer;
+
+	bool settimer = false;
+	int traceduration = 10;		// trace in 10 seconds
+
+	if (get_options(argc, argv, &port, &addr) < 0) {
+		return EXIT_FAILURE;
+	}
+
+	int cpu = 3;
+	set_affinity(cpu);
+	set_schedattr(getpid(), 81, SCHED_FIFO);
+
+	// Initialze TRPC channel
+	if (init_trpc(addr, port, &trpc_dbus, &trpc_event) < 0) {
+		return EXIT_FAILURE;
+	}
+
+	// Get Schedule Info
+	if (get_schedinfo(trpc_dbus) < 0) {
+		return EXIT_FAILURE;
+	}
+
+	// Activate BPF programs
+	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
+
+	// Initialize time_trigger linked list
+	init_time_trigger_list(&lh);
+
+	// Activate ftrace and its stop timer
+	settimer = set_stoptracer_timer(traceduration, &tracetimer);
+	tracer_on();
+
+	// Setup and start hrtimers for tasks
+	if (start_tt_timer(&lh) < 0) {
+		return EXIT_FAILURE;
+	}
+
+	struct time_trigger *tt_p;
 	LIST_FOREACH(tt_p, &lh, entry)
 		printf("TT will wake up Process %s(%d) with duration %d us and release_time %d\n",
 				tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time);
-
-	struct sigaction sa = {};
-	sa.sa_flags = SA_SIGINFO;
-	sa.sa_sigaction = &sighan_stoptracer;
-	if (sigaction(SIGNO_STOPTRACER, &sa, NULL) == -1) {
-		perror("Failed to set up signal handler");
-		return EXIT_FAILURE;
-	}
 
 	// The process will wait forever until it receives a signal from the handler
 	while (1) {
