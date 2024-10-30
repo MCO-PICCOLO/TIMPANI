@@ -80,7 +80,6 @@ static int trpc_method_dmiss(sd_bus_message *m, void *userdata,
 {
 	int ret;
 	char *name, *task;
-	char str[256];
 
 	ret = sd_bus_message_read(m, "ss", &name, &task);
 	if (ret < 0) {
@@ -89,16 +88,16 @@ static int trpc_method_dmiss(sd_bus_message *m, void *userdata,
 	}
 
 	if (trpc_server_ops && trpc_server_ops->dmiss_cb)
-		trpc_server_ops->dmiss_cb(name, task, str, sizeof(str));
+		trpc_server_ops->dmiss_cb(name, task);
 
-	return sd_bus_reply_method_return(m, "s", str);
+	return sd_bus_reply_method_return(m, NULL);
 }
 
 static const sd_bus_vtable trpc_vtable[] = {
 	SD_BUS_VTABLE_START(0),
 	SD_BUS_METHOD(TRPC_METHOD_REGISTER, "s", "", trpc_method_register, 0),
 	SD_BUS_METHOD(TRPC_METHOD_SCHEDINFO, "s", "ay", trpc_method_schedinfo, 0),
-	SD_BUS_METHOD(TRPC_METHOD_DMISS, "ss", "s", trpc_method_dmiss, 0),
+	SD_BUS_METHOD(TRPC_METHOD_DMISS, "ss", "", trpc_method_dmiss, 0),
 	SD_BUS_VTABLE_END
 };
 
@@ -466,13 +465,11 @@ cleanup:
 	return ret;
 }
 
-int trpc_client_dmiss(sd_bus *dbus, const char *name, const char *task,
-		char *str, size_t strsize)
+int trpc_client_dmiss(sd_bus *dbus, const char *name, const char *task)
 {
 	int ret;
 	sd_bus_message *reply = NULL;
 	sd_bus_error error = SD_BUS_ERROR_NULL;
-	const void *r_buf;
 
 	ret = sd_bus_call_method(dbus,
 				TRPC_SERVER_NAME,
@@ -484,17 +481,6 @@ int trpc_client_dmiss(sd_bus *dbus, const char *name, const char *task,
 	if (ret < 0) {
 		LOG_ERROR("%s\n", strerror(-ret));
 		goto cleanup;
-	}
-
-	ret = sd_bus_message_read(reply, "s", &r_buf);
-	if (ret < 0) {
-		LOG_ERROR("%s\n", strerror(-ret));
-		goto cleanup;
-	}
-
-	if (str) {
-		strncpy(str, r_buf, strsize);
-		str[strsize - 1] = '\0';
 	}
 
 cleanup:

@@ -59,12 +59,9 @@ static void register_callback(const char *name)
 	printf("Register: %s\n", name);
 }
 
-static void dmiss_callback(const char *name, const char *task,
-			char *str, size_t strsize)
+static void dmiss_callback(const char *name, const char *task)
 {
 	printf("Deadline miss: %s @ %s\n", task, name);
-
-	snprintf(str, strsize, "restart %s", task);
 }
 
 static void schedinfo_callback(const char *name, void **buf, size_t *bufsize)
