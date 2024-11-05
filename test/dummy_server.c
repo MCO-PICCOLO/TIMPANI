@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
+#include <time.h>	// struct timespec
 
 #include <libtrpc.h>
 #include <yaml.h>
@@ -46,6 +47,8 @@ static void parse_task(yaml_document_t *doc, yaml_node_t *node, struct sched_inf
 				tinfo->release_time = atoi(valstr);
 			} else if (!strcmp(keystr, "allowable_dmisses")) {
 				tinfo->allowable_deadline_misses = atoi(valstr);
+			} else if (!strcmp(keystr, "node_id")) {
+				tinfo->node_id = atoi(valstr);
 			}
 		}
 	}
@@ -54,6 +57,29 @@ static void parse_task(yaml_document_t *doc, yaml_node_t *node, struct sched_inf
 	tinfo->next = sinfo->tasks;
 	sinfo->tasks = tinfo;
 	sinfo->nr_tasks++;
+}
+
+static void parse_node(yaml_document_t *doc, yaml_node_t *node, struct sched_info *sinfo)
+{
+	for (yaml_node_pair_t *pair = node->data.mapping.pairs.start;
+	     pair < node->data.mapping.pairs.top; pair++) {
+		yaml_node_t *key_node = yaml_document_get_node(doc, pair->key);
+		yaml_node_t *value_node = yaml_document_get_node(doc, pair->value);
+
+		if (key_node && value_node) {
+			char *keystr = key_node->data.scalar.value;
+			char *valstr = value_node->data.scalar.value;
+			if (!strcmp(keystr, "id")) {
+				if (sinfo->nr_nodes >= SINFO_NODE_MAX) {
+					printf("No. nodes(%u) exceeds max. value(%u) !\n",
+						sinfo->nr_nodes, SINFO_NODE_MAX);
+					break;
+				}
+				sinfo->node_ids[sinfo->nr_nodes] = atoi(valstr);
+				sinfo->nr_nodes++;
+			}
+		}
+	}
 }
 
 static void parse_task_list(yaml_document_t *doc, yaml_node_t *node, struct sched_info *sinfo)
@@ -65,6 +91,21 @@ static void parse_task_list(yaml_document_t *doc, yaml_node_t *node, struct sche
 			yaml_node_t *next_node = yaml_document_get_node(doc, *item);
 			if (next_node && next_node->type == YAML_MAPPING_NODE) {
 				parse_task(doc, next_node, sinfo);
+			}
+		}
+		break;
+	}
+}
+
+static void parse_node_list(yaml_document_t *doc, yaml_node_t *node, struct sched_info *sinfo)
+{
+	switch (node->type) {
+	case YAML_SEQUENCE_NODE:
+		for (yaml_node_item_t *item = node->data.sequence.items.start;
+		     item < node->data.sequence.items.top; item++) {
+			yaml_node_t *next_node = yaml_document_get_node(doc, *item);
+			if (next_node && next_node->type == YAML_MAPPING_NODE) {
+				parse_node(doc, next_node, sinfo);
 			}
 		}
 		break;
@@ -90,6 +131,8 @@ static void parse_root_node(yaml_document_t *doc, yaml_node_t *node, struct sche
 					}
 				} else if (!strcmp(keystr, "tasks")) {
 					parse_task_list(doc, value_node, sinfo);
+				} else if (!strcmp(keystr, "nodes")) {
+					parse_node_list(doc, value_node, sinfo);
 				}
 			}
 		}
@@ -143,6 +186,19 @@ static int read_schedinfo_file(const char *filename, struct sched_info *sinfo)
 	return 0;
 }
 
+static int is_node_valid(uint32_t node_id, struct sched_info *sinfo)
+{
+	int i;
+
+	for (i = 0; i < sinfo->nr_nodes; i++) {
+		if (sinfo->node_ids[i] == node_id) {
+			return 1;
+		}
+
+	}
+	return 0;
+}
+
 static int init_schedinfo(const char *fname, struct sched_info *sinfo)
 {
 	int ret;
@@ -181,6 +237,7 @@ static void serialize_schedinfo(struct sched_info *sinfo)
 		printf("t->period: %u\n", t->period);
 		printf("t->release_time: %u\n", t->release_time);
 		printf("t->allowable_deadline_misses: %u\n", t->allowable_deadline_misses);
+		printf("t->node_id: %u\n", t->node_id);
 
 		serialize_int32_t(sbuf, t->pid);
 		serialize_str(sbuf, t->name);
@@ -189,6 +246,7 @@ static void serialize_schedinfo(struct sched_info *sinfo)
 		serialize_int32_t(sbuf, t->period);
 		serialize_int32_t(sbuf, t->release_time);
 		serialize_int32_t(sbuf, t->allowable_deadline_misses);
+		serialize_int32_t(sbuf, t->node_id);
 		nr_tasks++;
 	}
 
@@ -198,6 +256,7 @@ static void serialize_schedinfo(struct sched_info *sinfo)
 	}
 
 	// Pack sched_info into serial buffer.
+	// NOTE: Node info is not used by Timpani-N, so there is no need to send it to them.
 	serialize_blob(sbuf, sinfo->container_id, sizeof(sinfo->container_id));
 	serialize_int32_t(sbuf, sinfo->container_rt_runtime);
 	serialize_int32_t(sbuf, sinfo->container_rt_period);
@@ -209,12 +268,28 @@ static void serialize_schedinfo(struct sched_info *sinfo)
 
 static void register_callback(const char *name)
 {
-	printf("Register: %s\n", name);
+	uint32_t node_id = atoi(name);
+
+	if (!is_node_valid(node_id, &sched_info)) {
+		printf("Register: invalid node: %u\n", node_id);
+		return;
+	}
+
+	printf("Register: node: %u\n", node_id);
 }
 
 static void schedinfo_callback(const char *name, void **buf, size_t *bufsize)
 {
-	printf("SchedInfo: %s\n", name);
+	uint32_t node_id = atoi(name);
+
+	if (!is_node_valid(node_id, &sched_info)) {
+		printf("SchedInfo: invalid node: %u\n", node_id);
+		*buf = NULL;
+		bufsize = 0;
+		return;
+	}
+
+	printf("SchedInfo: node: %u\n", node_id);
 
 	serialize_schedinfo(&sched_info);
 
@@ -228,7 +303,64 @@ static void schedinfo_callback(const char *name, void **buf, size_t *bufsize)
 
 static void dmiss_callback(const char *name, const char *task)
 {
+	uint32_t node_id = atoi(name);
+
+	if (!is_node_valid(node_id, &sched_info)) {
+		printf("DMiss: invalid node: %u\n", node_id);
+		return;
+	}
+
 	printf("!!! DEADLINE MISS: %s @ %s !!!\n", task, name);
+}
+
+static void sync_callback(const char *name, int *ack, struct timespec *ts)
+{
+	/* array for marking each node ready status */
+	static uint32_t node_ready[SINFO_NODE_MAX];
+	/* The number of nodes that are ready */
+	static uint32_t no_ready;
+
+	int i;
+	uint32_t node_id = atoi(name);
+
+	if (!is_node_valid(node_id, &sched_info)) {
+		printf("Sync: invalid node: %u\n", node_id);
+		*ack = 0;
+		return;
+	}
+
+	printf("Sync: node: %u\n", node_id);
+
+	// check if this node is already set in node_ready[]
+	for (i = 0; i < no_ready; i++) {
+		if (node_ready[i] == node_id) {
+			/* No need to set */
+			break;
+		}
+	}
+	if (i == no_ready) {
+		/* Mark it as ready if it is not found in node_ready[] */
+		node_ready[no_ready] = node_id;
+		no_ready++;
+	}
+
+	if (no_ready == sched_info.nr_nodes) {
+		/* ACK: All nodes are ready */
+		*ack = 1;
+
+		clock_gettime(CLOCK_REALTIME, ts);
+
+		/* Add extra time to start timer value */
+		ts->tv_sec += 1;
+
+		printf("Sync: ACK %u with %ld sec %ld nsec\n",
+			node_id, ts->tv_sec, ts->tv_nsec);
+		return;
+	}
+
+	/* NACK */
+	printf("Sync: NACK %u\n", node_id);
+	*ack = 0;
 }
 
 int main(int argc, char *argv[])
@@ -241,6 +373,7 @@ int main(int argc, char *argv[])
 		.register_cb = register_callback,
 		.schedinfo_cb = schedinfo_callback,
 		.dmiss_cb = dmiss_callback,
+		.sync_cb = sync_callback,
 	};
 	uint32_t port = SERVER_PORT;
 	const char *sinfo_fname = "schedinfo.yaml";
