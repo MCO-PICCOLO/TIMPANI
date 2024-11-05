@@ -243,6 +243,7 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 			return -1;
 		}
 
+		deserialize_int32_t(sbuf, &tinfo->node_id);
 		deserialize_int32_t(sbuf, &tinfo->allowable_deadline_misses);
 		deserialize_int32_t(sbuf, &tinfo->release_time);
 		deserialize_int32_t(sbuf, &tinfo->period);
@@ -262,6 +263,7 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 		printf("tinfo->period: %d\n", tinfo->period);
 		printf("tinfo->release_time: %d\n", tinfo->release_time);
 		printf("tinfo->allowable_deadline_misses: %d\n", tinfo->allowable_deadline_misses);
+		printf("tinfo->node_id: %u\n", tinfo->node_id);
 #endif
 	}
 
@@ -278,6 +280,11 @@ static int get_schedinfo(sd_bus *dbus)
 	ret = trpc_client_schedinfo(dbus, "Timpani-N", &buf, &bufsize);
 	if (ret < 0) {
 		return ret;
+	}
+
+	if (buf == NULL || bufsize == 0) {
+		printf("Failed to get schedule info\n");
+		return -1;
 	}
 
 	sbuf = make_serial_buf((void *)buf, bufsize);
