@@ -264,6 +264,8 @@ static void serialize_schedinfo(struct sched_info *sinfo)
 	serialize_int32_t(sbuf, sinfo->container_period);
 	serialize_int32_t(sbuf, sinfo->pod_period);
 	serialize_int32_t(sbuf, sinfo->nr_tasks);
+
+	printf("sbuf size: %zu\n", sbuf->pos);
 }
 
 static void register_callback(const char *name)
@@ -290,10 +292,6 @@ static void schedinfo_callback(const char *name, void **buf, size_t *bufsize)
 	}
 
 	printf("SchedInfo: node: %u\n", node_id);
-
-	serialize_schedinfo(&sched_info);
-
-	printf("sbuf size: %zu\n", sbuf->pos);
 
 	if (buf)
 		*buf = sbuf->data;
@@ -389,6 +387,8 @@ int main(int argc, char *argv[])
 	if (ret < 0) {
 		goto out;
 	}
+
+	serialize_schedinfo(&sched_info);
 
 	ret = sd_event_default(&event);
 	if (ret < 0) {
