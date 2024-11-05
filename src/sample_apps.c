@@ -15,10 +15,6 @@
 #include "sample_apps.h"
 
 char pr_name[16];
-int test_loops;
-
-clockid_t clockid = CLOCK_MONOTONIC;
-struct timespec now, before;
 
 /*
  *  stress_cpu_nsqrt()
@@ -64,7 +60,6 @@ static int stress_cpu_nsqrt(void)
 			}
 		}
 	}
-	printf("nsqrt: complete!!!, i: %d cnt: %d result: %LF\n", i, cnt, res);
 
 	return EXIT_SUCCESS;
 }
@@ -98,94 +93,54 @@ static int stress_cpu_fibonacci(void)
 	return EXIT_SUCCESS;
 }
 
-// Function to perform calculations upon receiving SIGNO_TT
-static void do_calculations(int signo) {
-	// Do some calculation here, for example:
-	// int x = 5;
-	// int y = 6;
-	//printf("Result of %d + %d is: %d\n", x, y, x+y);
-	//x+y;
-	//stress_cpu_fibonacci();
-	for (int i = 0; i < test_loops; i++) {
+static void do_calculations(int loop_count) {
+	for (int i = 0; i < loop_count; i++) {
+		//stress_cpu_fibonacci();
 		stress_cpu_nsqrt();
 	}
 }
 
-unsigned int task_period;	// microseconds
-unsigned long long jitter_cnt;
-// Function to handle SIGNO_TT signals and execute do_calculations()
-static void sig_handler(int signo, siginfo_t *info, void *context) {
-	if (signo == SIGNO_TT) {
-		before = now;
-		clock_gettime(clockid, &now);
-
-		int jitter = diff(ts_ns(now), ts_ns(before)) / NSEC_PER_USEC - task_period;
-		if (jitter < -100 || jitter > 100) {
-			printf("%s: jitter(%llu) for execution: %d us\n", pr_name, ++jitter_cnt, jitter);
-		}
-		do_calculations(SIGNO_TT); // Perform calculations when receiving SIGNO_TT
-	}
-}
-
-#if 0
-void sigusr2_handler(int signo) {
-	if (signo == SIGUSR2) {
-		printf("Received SIGUSR2 signal\n");
-	}
-}
-#endif
-
 int main(int argc, char *argv[]) {
-	struct sigaction act;
+	sigset_t sig_set;
+	struct timespec now, before;
 
+	clockid_t clockid = CLOCK_REALTIME;
+
+	int signo = SIGNO_TT;
+	int signal_received = -1;
 	int pid = getpid();
 
-	task_period = atoi(argv[2]);
-	test_loops = atoi(argv[3]);
+	int loop_cnt = atoi(argv[2]);
 
 	prctl(PR_SET_NAME, (unsigned long)argv[1], 0, 0, 0);
 	prctl(PR_GET_NAME, pr_name, 0, 0, 0);
 
-	memset(&act, 0, sizeof(struct sigaction));
-	sigemptyset(&act.sa_mask);
-	act.sa_flags = SA_SIGINFO;
-	act.sa_sigaction = &sig_handler; // Set the signal handler function to handle SIGNO_TT
+	sigemptyset(&sig_set);
+	sigaddset(&sig_set, signo);
+	sigprocmask(SIG_BLOCK, &sig_set, NULL);
 
-	if (sigaction(SIGNO_TT, &act, NULL) == -1) {  // Register the signal handler for SIGNO_TT
-		perror("Failed to register sigaction");
-		return EXIT_FAILURE;
-	}
+	printf("%s(%d) is waiting for the signal(%d)\n", pr_name, pid, signo);
 
-#if 0
-	act.sa_sigaction = &sigusr2_handler;
-
-	if (sigaction(SIGUSR2, &act, NULL) == -1) {
-		perror("Failed to register sigaction");
-		return EXIT_FAILURE;
-	}
-#endif
-
-	printf("%s (%d) with period %d us is waiting for signal(%d)\n", pr_name, pid, task_period, SIGNO_TT);
-
-	int signal_received = 0; // Variable to keep track of the received signals
-
-	while (1) {
-		siginfo_t info;
-
-		clock_gettime(clockid, &now);
-
-		if (sigwait(&act.sa_mask, &signal_received) == -1) {   // Wait for a signal from act.sa_mask
-			perror("Failed to wait for signals");
+	while (true) {
+		if (sigwait(&sig_set, &signal_received) == -1) {
+			perror("Failed to wait for the signal");
 			return EXIT_FAILURE;
 		}
 
-		if (signal_received != SIGNO_TT) {
-			printf("signal %d is received!!!\n", signal_received);
-			continue;  // If the received signal is not SIGNO_TT, continue waiting
+		if (signal_received != signo) {
+			printf("Another signal(%d) is received!!!\n", signal_received);
+			continue;
 		}
-		printf("Received SIGNO_TT\n");
+
+		clock_gettime(clockid, &before);
+		do_calculations(loop_cnt);
+		clock_gettime(clockid, &now);
+#if DEBUG
+		printf("now: %ld before: %ld runtime: %8lu us loops: %d\n",
+			       ts_ns(now), ts_ns(before),
+			       (diff(ts_ns(now), ts_ns(before)) / NSEC_PER_USEC), loop_cnt);
+#endif
 	}
 
 	return EXIT_SUCCESS;
 }
-
