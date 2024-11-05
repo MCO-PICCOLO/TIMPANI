@@ -38,13 +38,14 @@ static sd_event *trpc_event;
 static sd_bus *trpc_dbus;
 
 static void remove_tt_node(struct time_trigger *tt_node);
-static int report_dmiss(sd_bus *dbus, const char *taskname);
+static int report_dmiss(sd_bus *dbus, int node_id, const char *taskname);
 
 // default option values
 int cpu = -1;
 int prio = -1;
 int port = 7777;
 const char *addr = "localhost";
+int node_id = 1;
 
 // TT Handler function executed upon timer expiration based on each period
 static void tt_timer(union sigval value) {
@@ -70,14 +71,14 @@ static void tt_timer(union sigval value) {
 		// Check if this task is still running
 		if (!tt_node->sigwait_enter) {
 			printf("!!! STILL OVERRUN %s(%d): %lu !!!\n", task->name, task->pid, deadline_ns);
-			report_dmiss(trpc_dbus, task->name);
+			report_dmiss(trpc_dbus, node_id, task->name);
 		// Check if this task meets the deadline
 		} else if (tt_node->sigwait_ts > deadline_ns) {
 			printf("!!! DEADLINE MISS %s(%d): %lu > %lu !!!\n",
 				task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
 			write_trace_marker("%s: Deadline miss: %lu diff\n",
 				task->name, tt_node->sigwait_ts - deadline_ns);
-			report_dmiss(trpc_dbus, task->name);
+			report_dmiss(trpc_dbus, node_id, task->name);
 		}
 	}
 #endif
@@ -270,14 +271,17 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 	return 0;
 }
 
-static int get_schedinfo(sd_bus *dbus)
+static int get_schedinfo(sd_bus *dbus, int node_id)
 {
 	int ret;
 	void *buf = NULL;
 	size_t bufsize;
 	serial_buf_t *sbuf = NULL;
+	char node_str[4];
 
-	ret = trpc_client_schedinfo(dbus, "Timpani-N", &buf, &bufsize);
+	snprintf(node_str, sizeof(node_str), "%u", node_id);
+
+	ret = trpc_client_schedinfo(dbus, node_str, &buf, &bufsize);
 	if (ret < 0) {
 		return ret;
 	}
@@ -306,18 +310,21 @@ static void remove_tt_node(struct time_trigger *tt_node) {
 	free(tt_node);
 }
 
-static int report_dmiss(sd_bus *dbus, const char *taskname)
+static int report_dmiss(sd_bus *dbus, int node_id, const char *taskname)
 {
 	int ret;
+	char node_str[4];
 
-	return trpc_client_dmiss(dbus, "Timpani-N", taskname);
+	snprintf(node_str, sizeof(node_str), "%u", node_id);
+
+	return trpc_client_dmiss(dbus, node_str, taskname);
 }
 
 static int get_options(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hc:P:p:")) >= 0) {
+	while ((opt = getopt(argc, argv, "hc:P:p:n:")) >= 0) {
 		switch (opt) {
 		case 'c':
 			cpu = atoi(optarg);
@@ -328,6 +335,9 @@ static int get_options(int argc, char *argv[])
 		case 'p':
 			port = atoi(optarg);
 			break;
+		case 'n':
+			node_id = atoi(optarg);
+			break;
 		case 'h':
 		default:
 			fprintf(stderr, "Usage: %s [options] [host]\n"
@@ -335,6 +345,7 @@ static int get_options(int argc, char *argv[])
 					"  -c <cpu_num>\tcpu affinity for timetrigger\n"
 					"  -P <prio>\tRT priority (1~99) for timetrigger\n"
 					"  -p <port>\tport to connect to\n"
+					"  -n <node id>\tNode ID number\n"
 					"  -h\tshow this help\n",
 					argv[0]);
 			return -1;
@@ -347,13 +358,18 @@ static int get_options(int argc, char *argv[])
 	return 0;
 }
 
-void init_time_trigger_list(struct listhead *lh_ptr)
+static void init_time_trigger_list(struct listhead *lh_ptr, int node_id)
 {
 	LIST_INIT(lh_ptr);
 
 	for (struct task_info *ti = sched_info.tasks; ti; ti = ti->next) {
 		struct time_trigger *tt_node;
 		unsigned int pid, priority, policy;
+
+		if (node_id != ti->node_id) {
+			/* The task does not belong to this node. */
+			continue;
+		}
 
 		tt_node = calloc(1, sizeof(struct time_trigger));
 		memcpy(&tt_node->task, ti, sizeof(tt_node->task));
@@ -446,7 +462,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Get Schedule Info
-	if (get_schedinfo(trpc_dbus) < 0) {
+	if (get_schedinfo(trpc_dbus, node_id) < 0) {
 		return EXIT_FAILURE;
 	}
 
@@ -454,7 +470,7 @@ int main(int argc, char *argv[])
 	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
 
 	// Initialize time_trigger linked list
-	init_time_trigger_list(&lh);
+	init_time_trigger_list(&lh, node_id);
 
 	// Activate ftrace and its stop timer
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
