@@ -46,6 +46,7 @@ int prio = -1;
 int port = 7777;
 const char *addr = "localhost";
 int node_id = 1;
+int enable_sync;
 
 // TT Handler function executed upon timer expiration based on each period
 static void tt_timer(union sigval value) {
@@ -304,6 +305,32 @@ static int get_schedinfo(sd_bus *dbus, int node_id)
 	return 0;
 }
 
+static int sync_timer(sd_bus *dbus, int node_id, struct timespec *ts_ptr)
+{
+	int ret;
+	int ack;
+	char node_str[4];
+
+	snprintf(node_str, sizeof(node_str), "%u", node_id);
+
+	while (1) {
+		ret = trpc_client_sync(dbus, node_str, &ack, ts_ptr);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (ack) {
+			printf("sync_timer: %ld sec %ld nsec\n", ts_ptr->tv_sec, ts_ptr->tv_nsec);
+			break;
+		}
+
+		printf("got NACK !\n");
+		usleep(100000);
+	}
+
+	return 0;
+}
+
 static void remove_tt_node(struct time_trigger *tt_node) {
 	timer_delete(tt_node->timer);
 	LIST_REMOVE(tt_node, entry);
@@ -324,7 +351,7 @@ static int get_options(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hc:P:p:n:")) >= 0) {
+	while ((opt = getopt(argc, argv, "hc:P:p:n:s")) >= 0) {
 		switch (opt) {
 		case 'c':
 			cpu = atoi(optarg);
@@ -338,6 +365,9 @@ static int get_options(int argc, char *argv[])
 		case 'n':
 			node_id = atoi(optarg);
 			break;
+		case 's':
+			enable_sync = 1;
+			break;
 		case 'h':
 		default:
 			fprintf(stderr, "Usage: %s [options] [host]\n"
@@ -346,6 +376,7 @@ static int get_options(int argc, char *argv[])
 					"  -P <prio>\tRT priority (1~99) for timetrigger\n"
 					"  -p <port>\tport to connect to\n"
 					"  -n <node id>\tNode ID number\n"
+					"  -s\tEnable timer synchronization across multiple nodes\n"
 					"  -h\tshow this help\n",
 					argv[0]);
 			return -1;
@@ -445,6 +476,8 @@ int main(int argc, char *argv[])
 	bool settimer = false;
 	int traceduration = 10;		// trace in 10 seconds
 
+	struct timespec sync_ts;
+
 	if (get_options(argc, argv) < 0) {
 		return EXIT_FAILURE;
 	}
@@ -471,6 +504,11 @@ int main(int argc, char *argv[])
 
 	// Initialize time_trigger linked list
 	init_time_trigger_list(&lh, node_id);
+
+	// Synchronize hrtimers across multiple nodes
+	if (enable_sync && sync_timer(trpc_dbus, node_id, &sync_ts) < 0) {
+		return EXIT_FAILURE;
+	}
 
 	// Activate ftrace and its stop timer
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
