@@ -141,6 +141,34 @@ static inline bool set_stoptracer_timer(int duration, timer_t *timer) { return f
 #endif
 
 #ifdef CONFIG_TRACE_BPF
+static uint64_t bpf_ktime_off;
+
+static void calibrate_bpf_ktime_offset(void)
+{
+	int i;
+	struct timespec t1, t2, t3;
+	uint64_t best_delta = 0, delta, ts;
+
+	for (i = 0; i < 10; i++) {
+		clock_gettime(CLOCK_REALTIME, &t1);
+		clock_gettime(CLOCK_MONOTONIC, &t2);
+		clock_gettime(CLOCK_REALTIME, &t3);
+
+		delta = ts_ns(t3) - ts_ns(t1);
+		ts = (ts_ns(t3) + ts_ns(t1)) / 2;
+
+		if (i == 0 || delta < best_delta) {
+			best_delta = delta;
+			bpf_ktime_off = ts - ts_ns(t2);
+		}
+	}
+}
+
+static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts)
+{
+	return bpf_ktime_off + bpf_ts;
+}
+
 static int sigwait_bpf_callback(void *ctx, void *data, size_t len)
 {
 	struct sigwait_event *e = (struct sigwait_event *)data;
@@ -154,7 +182,7 @@ static int sigwait_bpf_callback(void *ctx, void *data, size_t len)
 				e->timestamp, tt_p->task.name, tt_p->task.pid,
 				e->enter ? "enter" : "exit");
 #endif
-			tt_p->sigwait_ts = e->timestamp;
+			tt_p->sigwait_ts = bpf_ktime_to_real(e->timestamp);
 			tt_p->sigwait_enter = e->enter;
 			break;
 		}
@@ -163,6 +191,8 @@ static int sigwait_bpf_callback(void *ctx, void *data, size_t len)
 	return 0;
 }
 #else
+static inline void calibrate_bpf_ktime_offset(void) {}
+static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts) { return bpf_ts; }
 static inline int sigwait_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
@@ -489,6 +519,9 @@ int main(int argc, char *argv[])
 	if (prio > 0 && prio <= 99) {
 		set_schedattr(getpid(), prio, SCHED_FIFO);
 	}
+
+	// Calibrate BPF ktime(CLOCK_MONOTONIC) offset to CLOCK_REALTIME
+	calibrate_bpf_ktime_offset();
 
 	// Initialze TRPC channel
 	if (init_trpc(addr, port, &trpc_dbus, &trpc_event) < 0) {
