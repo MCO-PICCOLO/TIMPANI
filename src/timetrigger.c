@@ -47,6 +47,7 @@ int port = 7777;
 const char *addr = "localhost";
 int node_id = 1;
 int enable_sync;
+clockid_t clockid = CLOCK_REALTIME;
 
 // TT Handler function executed upon timer expiration based on each period
 static void tt_timer(union sigval value) {
@@ -54,14 +55,14 @@ static void tt_timer(union sigval value) {
 	struct task_info *task = (struct task_info *)&tt_node->task;
 	struct timespec before, after;
 
-	clock_gettime(CLOCK_MONOTONIC, &before);
+	clock_gettime(clockid, &before);
 	write_trace_marker("%s: Timer expired: now: %lld, diff: %lld\n",
 			task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer));
 
 	// If a task has its own release time, do nanosleep
 	if (task->release_time) {
 		struct timespec ts = us_ts(task->release_time);
-		clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL);
+		clock_nanosleep(clockid, 0, &ts, NULL);
 	}
 
 #ifdef CONFIG_TRACE_BPF
@@ -84,7 +85,7 @@ static void tt_timer(union sigval value) {
 	}
 #endif
 
-	clock_gettime(CLOCK_MONOTONIC, &after);
+	clock_gettime(clockid, &after);
 	write_trace_marker("%s: Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us \n",
 			task->name, SIGNO_TT, task->pid, ts_ns(after), ( ts_diff(after, before) / NSEC_PER_USEC ));
 
@@ -98,7 +99,7 @@ static void tt_timer(union sigval value) {
 static void sighan_stoptracer(int signo, siginfo_t *info, void *context) {
 	struct timespec now;
 
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	clock_gettime(clockid, &now);
 	write_trace_marker("Stop Tracer: %lld \n", ts_ns(now));
 	tracer_off();
 	signal(signo, SIG_IGN);
@@ -124,7 +125,7 @@ static bool set_stoptracer_timer(int duration, timer_t *timer) {
 	its.it_value.tv_sec = duration;
 	its.it_value.tv_nsec = 0;
 
-	if (timer_create(CLOCK_MONOTONIC, &sev, timer) == -1) {
+	if (timer_create(clockid, &sev, timer) == -1) {
 		perror("Failed to create timer");
 		return false;
 	}
@@ -429,7 +430,7 @@ static int start_tt_timer(struct listhead *lh_ptr)
 	struct time_trigger *tt_p;
 	struct timespec starttimer_ts;
 
-	clock_gettime(CLOCK_MONOTONIC, &starttimer_ts);
+	clock_gettime(clockid, &starttimer_ts);
 
 	LIST_FOREACH(tt_p, lh_ptr, entry) {
 		struct itimerspec its;
@@ -453,7 +454,7 @@ static int start_tt_timer(struct listhead *lh_ptr)
 				tt_p->task.period, ts_ns(its.it_value),
 				its.it_interval.tv_sec, its.it_interval.tv_nsec);
 
-		if (timer_create(CLOCK_MONOTONIC, &sev, &tt_p->timer)) {
+		if (timer_create(clockid, &sev, &tt_p->timer)) {
 			perror("Failed to create timer");
 			return -1;
 		}
