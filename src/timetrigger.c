@@ -344,6 +344,8 @@ static int sync_timer(sd_bus *dbus, int node_id, struct timespec *ts_ptr)
 
 	snprintf(node_str, sizeof(node_str), "%u", node_id);
 
+	printf("Sync");
+	fflush(stdout);
 	while (1) {
 		ret = trpc_client_sync(dbus, node_str, &ack, ts_ptr);
 		if (ret < 0) {
@@ -351,11 +353,13 @@ static int sync_timer(sd_bus *dbus, int node_id, struct timespec *ts_ptr)
 		}
 
 		if (ack) {
-			printf("sync_timer: %ld sec %ld nsec\n", ts_ptr->tv_sec, ts_ptr->tv_nsec);
+			printf("\ntimestamp: %ld sec %ld nsec\n", ts_ptr->tv_sec, ts_ptr->tv_nsec);
 			break;
 		}
 
-		printf("got NACK !\n");
+		printf(".");
+		fflush(stdout);
+		/* sleep 100ms to prevent busy polling */
 		usleep(100000);
 	}
 
