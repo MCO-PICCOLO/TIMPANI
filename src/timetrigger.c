@@ -455,12 +455,16 @@ static void init_time_trigger_list(struct listhead *lh_ptr, int node_id)
 	}
 }
 
-static int start_tt_timer(struct listhead *lh_ptr)
+static int start_tt_timer(struct listhead *lh_ptr, struct timespec *sync_ts)
 {
 	struct time_trigger *tt_p;
 	struct timespec starttimer_ts;
 
-	clock_gettime(clockid, &starttimer_ts);
+	if (enable_sync) {
+		starttimer_ts = *sync_ts;
+	} else {
+		clock_gettime(clockid, &starttimer_ts);
+	}
 
 	LIST_FOREACH(tt_p, lh_ptr, entry) {
 		struct itimerspec its;
@@ -549,7 +553,7 @@ int main(int argc, char *argv[])
 	tracer_on();
 
 	// Setup and start hrtimers for tasks
-	if (start_tt_timer(&lh) < 0) {
+	if (start_tt_timer(&lh, &sync_ts) < 0) {
 		return EXIT_FAILURE;
 	}
 
