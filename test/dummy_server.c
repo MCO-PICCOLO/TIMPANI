@@ -317,6 +317,8 @@ static void sync_callback(const char *name, int *ack, struct timespec *ts)
 	static uint32_t node_ready[SINFO_NODE_MAX];
 	/* The number of nodes that are ready */
 	static uint32_t no_ready;
+	/* timestamp to sync across multiple nodes */
+	static struct timespec sync_ts;
 
 	int i;
 	uint32_t node_id = atoi(name);
@@ -344,12 +346,18 @@ static void sync_callback(const char *name, int *ack, struct timespec *ts)
 
 	if (no_ready == sched_info.nr_nodes) {
 		/* ACK: All nodes are ready */
-		*ack = 1;
+		if (sync_ts.tv_sec == 0 && sync_ts.tv_nsec == 0) {
+			clock_gettime(CLOCK_REALTIME, &sync_ts);
+			/* Add extra time to start timer value */
+			sync_ts.tv_sec += 1;
+		}
 
-		clock_gettime(CLOCK_REALTIME, ts);
-
-		/* Add extra time to start timer value */
-		ts->tv_sec += 1;
+		if (ack)
+			*ack = 1;
+		if (ts) {
+			ts->tv_sec = sync_ts.tv_sec;
+			ts->tv_nsec = sync_ts.tv_nsec;
+		}
 
 		printf("Sync: ACK %u with %ld sec %ld nsec\n",
 			node_id, ts->tv_sec, ts->tv_nsec);
