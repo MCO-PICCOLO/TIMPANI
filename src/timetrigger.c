@@ -49,6 +49,10 @@ int node_id = 1;
 int enable_sync;
 clockid_t clockid = CLOCK_REALTIME;
 
+// start timer
+#define STARTTIMER_INC_IN_NS	5000000		/* 5 ms */
+struct timespec starttimer_ts;
+
 // TT Handler function executed upon timer expiration based on each period
 static void tt_timer(union sigval value) {
 	struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
@@ -459,15 +463,14 @@ static void init_time_trigger_list(struct listhead *lh_ptr, int node_id)
 	}
 }
 
-static int start_tt_timer(struct listhead *lh_ptr, struct timespec *sync_ts)
+static int start_tt_timer(struct listhead *lh_ptr)
 {
 	struct time_trigger *tt_p;
-	struct timespec starttimer_ts;
 
-	if (enable_sync) {
-		starttimer_ts = *sync_ts;
-	} else {
+	if (!enable_sync) {
+		/* No synchronization across multiple nodes */
 		clock_gettime(clockid, &starttimer_ts);
+		starttimer_ts.tv_nsec += STARTTIMER_INC_IN_NS;
 	}
 
 	LIST_FOREACH(tt_p, lh_ptr, entry) {
@@ -483,7 +486,7 @@ static int start_tt_timer(struct listhead *lh_ptr, struct timespec *sync_ts)
 		sev.sigev_value.sival_ptr = tt_p;
 
 		its.it_value.tv_sec = starttimer_ts.tv_sec;
-		its.it_value.tv_nsec = starttimer_ts.tv_nsec + 5000000;
+		its.it_value.tv_nsec = starttimer_ts.tv_nsec;
 		its.it_interval.tv_sec = tt_p->task.period / USEC_PER_SEC;
 		its.it_interval.tv_nsec = tt_p->task.period % USEC_PER_SEC * NSEC_PER_USEC;
 
@@ -514,8 +517,6 @@ int main(int argc, char *argv[])
 
 	bool settimer = false;
 	int traceduration = 10;		// trace in 10 seconds
-
-	struct timespec sync_ts;
 
 	if (get_options(argc, argv) < 0) {
 		return EXIT_FAILURE;
@@ -548,7 +549,7 @@ int main(int argc, char *argv[])
 	init_time_trigger_list(&lh, node_id);
 
 	// Synchronize hrtimers across multiple nodes
-	if (enable_sync && sync_timer(trpc_dbus, node_id, &sync_ts) < 0) {
+	if (enable_sync && sync_timer(trpc_dbus, node_id, &starttimer_ts) < 0) {
 		return EXIT_FAILURE;
 	}
 
@@ -557,7 +558,7 @@ int main(int argc, char *argv[])
 	tracer_on();
 
 	// Setup and start hrtimers for tasks
-	if (start_tt_timer(&lh, &sync_ts) < 0) {
+	if (start_tt_timer(&lh) < 0) {
 		return EXIT_FAILURE;
 	}
 
