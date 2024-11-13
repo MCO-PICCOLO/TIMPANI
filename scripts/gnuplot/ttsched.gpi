@@ -1,0 +1,26 @@
+#!/usr/bin/env gnuplot
+reset session
+set term pngcairo font 'Liberation Sans, 11' size 6880, 1080
+# set output 'gantt.png'
+
+set colorsequence podo
+set title 'Gantt Chart for Time-triggered Real-time Tasks'
+set offsets 1,1,1,1
+#set xtics 10000
+# display x labels every 10ms
+set xtics 10
+set grid x y
+set key right bottom
+
+maxpacketperflow = 10
+
+# below are required variables for @gantt
+
+boxheight     = 1.0 / maxpacketperflow
+boxovershootl = boxheight * 0
+boxovershootr = boxheight * 0.5
+
+load 'gantt-by-flow.fct'
+#plot 'sched.data' @gantt
+datafile=system("echo $GP_INPUT_FILE")
+plot datafile @gantt

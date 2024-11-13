@@ -47,6 +47,7 @@ int port = 7777;
 const char *addr = "localhost";
 int node_id = 1;
 int enable_sync;
+int enable_gnuplot;
 clockid_t clockid = CLOCK_REALTIME;
 int traceduration = 10;		// trace in 10 seconds
 
@@ -100,13 +101,14 @@ static void tt_timer(union sigval value) {
 	tt_node->prev_timer = before;
 }
 
-#ifdef CONFIG_TRACE_EVENT
+#if defined(CONFIG_TRACE_EVENT) || defined(CONFIG_TRACE_BPF_EVENT)
 static void sighan_stoptracer(int signo, siginfo_t *info, void *context) {
 	struct timespec now;
 
 	clock_gettime(clockid, &now);
 	write_trace_marker("Stop Tracer: %lld \n", ts_ns(now));
 	tracer_off();
+	traceduration = 0;
 	signal(signo, SIG_IGN);
 }
 
@@ -202,6 +204,54 @@ static inline int sigwait_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
 #ifdef CONFIG_TRACE_BPF_EVENT
+static inline void write_gnuplot_data(struct schedstat_event *e, const char *tname)
+{
+	static uint64_t ts_first;
+	static FILE *gpfile;
+	uint64_t ts_wakeup, ts_start, ts_stop;
+
+	if (traceduration == 0) {
+		/* trace timer expired */
+		enable_gnuplot = 0;
+		fclose(gpfile);
+		gpfile = NULL;
+		return;
+	}
+
+	if (ts_first == 0) {
+		char fname[32];
+
+		snprintf(fname, sizeof(fname), "node%d.gpdata", node_id);
+		gpfile = fopen(fname, "w+");
+		if (gpfile == NULL) {
+			enable_gnuplot = 0;
+			return;
+		}
+
+		ts_first = ts_ns(starttimer_ts);
+	}
+
+	// convert monotonic ktime to realtime
+	ts_wakeup = bpf_ktime_to_real(e->ts_wakeup);
+	ts_start = bpf_ktime_to_real(e->ts_start);
+	ts_stop = bpf_ktime_to_real(e->ts_stop);
+
+        // subtract starttimer_ts from timestamps so that timestamps start at 0
+	ts_wakeup -= ts_first;
+	ts_start -= ts_first;
+	ts_stop -= ts_first;
+
+        // convert ns to ms
+	ts_wakeup /= 1000000;
+	ts_start /= 1000000;
+	ts_stop /= 1000000;
+
+	// Column formatting:
+	// task event ignored resource priority activate start stop ignored
+	fprintf(gpfile, "%-16s 0 0 N%dC%d 0 %lu %lu %lu 0\n",
+		tname, node_id, e->cpu, ts_wakeup, ts_start, ts_stop);
+}
+
 static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
 {
 	struct schedstat_event *e = (struct schedstat_event *)data;
@@ -218,6 +268,10 @@ static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
 				tt_p->task.name, e->pid, e->cpu, runtime, latency);
 			break;
 		}
+	}
+
+	if (enable_gnuplot && tt_p != NULL) {
+		write_gnuplot_data(e, tt_p->task.name);
 	}
 
 	return 0;
@@ -391,7 +445,7 @@ static int get_options(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hc:P:p:n:st:")) >= 0) {
+	while ((opt = getopt(argc, argv, "hc:P:p:n:st:g")) >= 0) {
 		switch (opt) {
 		case 'c':
 			cpu = atoi(optarg);
@@ -411,6 +465,9 @@ static int get_options(int argc, char *argv[])
 		case 's':
 			enable_sync = 1;
 			break;
+		case 'g':
+			enable_gnuplot = 1;
+			break;
 		case 'h':
 		default:
 			fprintf(stderr, "Usage: %s [options] [host]\n"
@@ -421,6 +478,7 @@ static int get_options(int argc, char *argv[])
 					"  -t <seconds>\ttrace duration in seconds\n"
 					"  -n <node id>\tNode ID number\n"
 					"  -s\tEnable timer synchronization across multiple nodes\n"
+					"  -g\tEnable saving gnuplot data file by using BPF (node<id>.gpdata)\n"
 					"  -h\tshow this help\n",
 					argv[0]);
 			return -1;
