@@ -48,6 +48,7 @@ const char *addr = "localhost";
 int node_id = 1;
 int enable_sync;
 clockid_t clockid = CLOCK_REALTIME;
+int traceduration = 10;		// trace in 10 seconds
 
 // start timer
 #define STARTTIMER_INC_IN_NS	5000000		/* 5 ms */
@@ -390,7 +391,7 @@ static int get_options(int argc, char *argv[])
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "hc:P:p:n:s")) >= 0) {
+	while ((opt = getopt(argc, argv, "hc:P:p:n:st:")) >= 0) {
 		switch (opt) {
 		case 'c':
 			cpu = atoi(optarg);
@@ -400,6 +401,9 @@ static int get_options(int argc, char *argv[])
 			break;
 		case 'p':
 			port = atoi(optarg);
+			break;
+		case 't':
+			traceduration = atoi(optarg);
 			break;
 		case 'n':
 			node_id = atoi(optarg);
@@ -414,6 +418,7 @@ static int get_options(int argc, char *argv[])
 					"  -c <cpu_num>\tcpu affinity for timetrigger\n"
 					"  -P <prio>\tRT priority (1~99) for timetrigger\n"
 					"  -p <port>\tport to connect to\n"
+					"  -t <seconds>\ttrace duration in seconds\n"
 					"  -n <node id>\tNode ID number\n"
 					"  -s\tEnable timer synchronization across multiple nodes\n"
 					"  -h\tshow this help\n",
@@ -516,7 +521,6 @@ int main(int argc, char *argv[])
 	timer_t tracetimer;
 
 	bool settimer = false;
-	int traceduration = 10;		// trace in 10 seconds
 
 	if (get_options(argc, argv) < 0) {
 		return EXIT_FAILURE;
