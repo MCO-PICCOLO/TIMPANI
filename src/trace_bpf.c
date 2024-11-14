@@ -192,6 +192,7 @@ void bpf_off(void)
 		sigwait_bpf = NULL;
 	}
 
+#ifdef CONFIG_TRACE_BPF_EVENT
 	if (schedstat_bpf) {
 		schedstat_rb_data.need_exit = 1;
 		pthread_join(schedstat_rb_data.thread, NULL);
@@ -204,6 +205,7 @@ void bpf_off(void)
 		schedstat_bpf__destroy(schedstat_bpf);
 		schedstat_bpf = NULL;
 	}
+#endif
 }
 
 int bpf_add_pid(int pid)
