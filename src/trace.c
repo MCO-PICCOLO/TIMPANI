@@ -59,7 +59,6 @@ void tracer_on(void) {
 
 	tracer_fd = open(tracer_path, O_WRONLY);
 	if (tracer_fd >= 0) {
-		printf("Start Tracer\n");
 		write(tracer_fd, "1", 1);
 	}
 }
@@ -82,7 +81,6 @@ void tracer_off(void) {
 	if (tracer_fd >= 0) {
 		write(tracer_fd, "0", 1);
 		close(tracer_fd);
-		printf("Stop Tracer\n");
 	}
 
 	close_trace_marker();

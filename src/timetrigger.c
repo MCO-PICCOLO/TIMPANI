@@ -109,6 +109,7 @@ static void sighan_stoptracer(int signo, siginfo_t *info, void *context) {
 	write_trace_marker("Stop Tracer: %lld \n", ts_ns(now));
 	tracer_off();
 	traceduration = 0;
+	printf("tracer_off!!!: %ld\n", ts_ns(now));
 	signal(signo, SIG_IGN);
 }
 
@@ -624,6 +625,10 @@ int main(int argc, char *argv[])
 	// Activate ftrace and its stop timer
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
 	tracer_on();
+
+	struct timespec now;
+	clock_gettime(clockid, &now);
+	printf("tracer_on!!!: %ld\n", ts_ns(now));
 
 	struct time_trigger *tt_p;
 	LIST_FOREACH(tt_p, &lh, entry)
