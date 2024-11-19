@@ -127,20 +127,21 @@ static bool set_stoptracer_timer(int duration, timer_t *timer) {
 	sev.sigev_notify = SIGEV_SIGNAL;
 	sev.sigev_signo = SIGNO_STOPTRACER;
 
+	its.it_value.tv_sec = starttimer_ts.tv_sec + duration;
+	its.it_value.tv_nsec = starttimer_ts.tv_nsec;
 	its.it_interval.tv_sec = duration;
 	its.it_interval.tv_nsec = 0;
-	its.it_value.tv_sec = duration;
-	its.it_value.tv_nsec = 0;
 
 	if (timer_create(clockid, &sev, timer) == -1) {
 		perror("Failed to create timer");
 		return false;
 	}
 
-	if (timer_settime(*timer, 0, &its, NULL) == -1) {
+	if (timer_settime(*timer, TIMER_ABSTIME, &its, NULL) == -1) {
 		perror("Failed to set timer period");
 		return false;
 	}
+
 	return true;
 }
 #else
