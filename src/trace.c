@@ -41,38 +41,52 @@ static void disable_event(int fd, const char *path) {
 	}
 }
 
-void tracer_on(void) {
+static void enable_events(void) {
 	en_ev_sched_fd = enable_event(en_ev_sched_path);
 	en_ev_timer_fd = enable_event(en_ev_timer_path);
 	en_ev_signal_fd = enable_event(en_ev_signal_path);
 	en_ev_enter_sigwait_fd = enable_event(en_ev_enter_sigwait_path);
 	en_ev_exit_sigwait_fd = enable_event(en_ev_exit_sigwait_path);
+}
+
+static void open_trace_marker(void) {
+	marker_fd = open(marker_path, O_WRONLY);
+}
+
+void tracer_on(void) {
+	enable_events();
+	open_trace_marker();
 
 	tracer_fd = open(tracer_path, O_WRONLY);
 	if (tracer_fd >= 0) {
 		printf("Start Tracer\n");
 		write(tracer_fd, "1", 1);
 	}
-
-	marker_fd = open(marker_path, O_WRONLY);
 }
 
-void tracer_off(void) {
+static void disable_events(void) {
+	disable_event(en_ev_sched_fd, en_ev_sched_path);
+	disable_event(en_ev_timer_fd, en_ev_timer_path);
+	disable_event(en_ev_signal_fd, en_ev_signal_path);
+	disable_event(en_ev_enter_sigwait_fd, en_ev_enter_sigwait_path);
+	disable_event(en_ev_exit_sigwait_fd, en_ev_exit_sigwait_path);
+}
+
+static void close_trace_marker(void) {
 	if (marker_fd >= 0) {
 		close(marker_fd);
 	}
+}
 
+void tracer_off(void) {
 	if (tracer_fd >= 0) {
 		write(tracer_fd, "0", 1);
 		close(tracer_fd);
 		printf("Stop Tracer\n");
 	}
 
-	disable_event(en_ev_sched_fd, en_ev_sched_path);
-	disable_event(en_ev_timer_fd, en_ev_timer_path);
-	disable_event(en_ev_signal_fd, en_ev_signal_path);
-	disable_event(en_ev_enter_sigwait_fd, en_ev_enter_sigwait_path);
-	disable_event(en_ev_exit_sigwait_fd, en_ev_exit_sigwait_path);
+	close_trace_marker();
+	disable_events();
 }
 
 void write_trace_marker(const char *fmt, ...) {
