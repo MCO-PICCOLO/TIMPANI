@@ -616,14 +616,14 @@ int main(int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	// Activate ftrace and its stop timer
-	settimer = set_stoptracer_timer(traceduration, &tracetimer);
-	tracer_on();
-
 	// Setup and start hrtimers for tasks
 	if (start_tt_timer(&lh) < 0) {
 		return EXIT_FAILURE;
 	}
+
+	// Activate ftrace and its stop timer
+	settimer = set_stoptracer_timer(traceduration, &tracetimer);
+	tracer_on();
 
 	struct time_trigger *tt_p;
 	LIST_FOREACH(tt_p, &lh, entry)
