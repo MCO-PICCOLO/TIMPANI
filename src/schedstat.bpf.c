@@ -24,8 +24,6 @@ struct {
 struct sched_time {
 	uint64_t ts_wakeup;
 	uint64_t ts_start;
-	int pid;
-	int cpu;
 };
 
 // BPF program's internal hash map to save sched_waking event info
@@ -44,30 +42,51 @@ struct {
 	__type(value, struct sched_time);
 } sched_switch_map SEC(".maps");
 
-SEC("tracepoint/sched/sched_waking")
-int handle_sched_waking(struct trace_event_raw_sched_wakeup_template *ctx)
+// task_struct::state renamed to __state since v5.14
+// Refer to https://github.com/torvalds/linux/commit/2f064a59a1 for more info
+#define TASK_RUNNING	0x0
+
+struct task_struct___o {
+	volatile long int state;
+} __attribute__((preserve_access_index));
+
+struct task_struct___x {
+	unsigned int __state;
+} __attribute__((preserve_access_index));
+
+static __always_inline __s64 get_task_state(void *task)
 {
+	struct task_struct___x *t = task;
+
+	if (bpf_core_field_exists(t->__state))
+		return BPF_CORE_READ(t, __state);
+	return BPF_CORE_READ((struct task_struct___o *)task, state);
+}
+
+// sched_waking tracepoint
+SEC("tp_btf/sched_waking")
+int BPF_PROG(sched_waking, struct task_struct *task)
+{
+	uint64_t now = bpf_ktime_get_ns();
 	uint8_t *filtered;
 	pid_t pid;
+	struct sched_time data;
 
-	BPF_CORE_READ_INTO(&pid, ctx, pid);
+	BPF_CORE_READ_INTO(&pid, task, pid);
 	filtered = bpf_map_lookup_elem(&pid_filter_map, &pid);
 	if (!filtered) {
 		return 0;
 	}
 
-	uint64_t now = bpf_ktime_get_ns();
-	struct sched_time data = {};
 	data.ts_wakeup = now;
-	data.pid = pid;
-	BPF_CORE_READ_INTO(&data.cpu, ctx, target_cpu);
 	bpf_map_update_elem(&sched_waking_map, &pid, &data, BPF_ANY);
 
 	return 0;
 }
 
-SEC("tracepoint/sched/sched_switch")
-int handle_sched_switch(struct trace_event_raw_sched_switch *ctx)
+// sched_switch tracepoint
+SEC("tp_btf/sched_switch")
+int BPF_PROG(sched_switch, bool preempt, struct task_struct *prev, struct task_struct *next)
 {
 	uint64_t now = bpf_ktime_get_ns();
 	struct event *e;
@@ -75,10 +94,12 @@ int handle_sched_switch(struct trace_event_raw_sched_switch *ctx)
 	struct sched_time *pdata;
 	pid_t pid;
 
-	BPF_CORE_READ_INTO(&pid, ctx, prev_pid);
+	// Check if task is filtered and scheduled out
+	BPF_CORE_READ_INTO(&pid, prev, pid);
 	pdata = bpf_map_lookup_elem(&sched_switch_map, &pid);
 	if (pdata) {
-		struct schedstat_event *e = bpf_ringbuf_reserve(&buffer, sizeof(struct schedstat_event), 0);
+		struct schedstat_event *e;
+		e = bpf_ringbuf_reserve(&buffer, sizeof(struct schedstat_event), 0);
 		if (!e) {
 			return 1;
 		}
@@ -87,20 +108,29 @@ int handle_sched_switch(struct trace_event_raw_sched_switch *ctx)
 		e->ts_wakeup = pdata->ts_wakeup;
 		e->ts_start = pdata->ts_start;
 		e->ts_stop = now;
-		e->cpu = pdata->cpu;
+		e->cpu = bpf_get_smp_processor_id();
 		bpf_ringbuf_submit(e, 0);
+
+		// Check whether prev task is being preempted or not
+		if (get_task_state(prev) == TASK_RUNNING) {
+			// On being preempted, add a new entry into sched_wakeup_map
+			struct sched_time data;
+
+			data.ts_wakeup = pdata->ts_wakeup;
+			bpf_map_update_elem(&sched_waking_map, &pid, &data, BPF_ANY);
+		}
 
 		bpf_map_delete_elem(&sched_switch_map, &pid);
 	}
 
-	BPF_CORE_READ_INTO(&pid, ctx, next_pid);
+	// Check if task is filtered and scheduled in for execution
+	BPF_CORE_READ_INTO(&pid, next, pid);
 	filtered = bpf_map_lookup_elem(&pid_filter_map, &pid);
 	if (filtered) {
 		pdata = bpf_map_lookup_elem(&sched_waking_map, &pid);
 		if (pdata) {
-			struct sched_time data = {};
-			data.pid = pid;
-			data.cpu = pdata->cpu;
+			struct sched_time data;
+
 			data.ts_start = now;
 			data.ts_wakeup = pdata->ts_wakeup;
 			bpf_map_update_elem(&sched_switch_map, &pid, &data, BPF_ANY);
