@@ -1,3 +1,6 @@
+nodes:
+  - id: 1
+  - id: 2
 tasks:
   - name: wakee1
     priority: 80
@@ -5,15 +8,18 @@ tasks:
     period: 10000
     release: 1000
     allowable_dmisses: 5
+    node_id: 1
   - name: wakee2
     priority: 80
     policy: 1
     period: 50000
     release: 5000
     allowable_dmisses: 0
+    node_id: 1
   - name: wakee3
     priority: 80
     policy: 1
     period: 20000
     release: 2000
     allowable_dmisses: 10
+    node_id: 2
