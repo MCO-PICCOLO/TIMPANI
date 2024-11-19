@@ -206,6 +206,8 @@ static inline int sigwait_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
 #ifdef CONFIG_TRACE_BPF_EVENT
+#define GNUPLOT_TIME_DIV	100000	// divisor for gnuplot time axis unit: 100 us
+
 static inline void write_gnuplot_data(struct schedstat_event *e, const char *tname)
 {
 	static uint64_t ts_first;
@@ -243,10 +245,10 @@ static inline void write_gnuplot_data(struct schedstat_event *e, const char *tna
 	ts_start -= ts_first;
 	ts_stop -= ts_first;
 
-        // convert ns to ms
-	ts_wakeup /= 1000000;
-	ts_start /= 1000000;
-	ts_stop /= 1000000;
+        // scale ns unit upto predefined time unit in round up manner
+	ts_wakeup = (ts_wakeup + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
+	ts_start = (ts_start + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
+	ts_stop = (ts_stop + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
 
 	// Column formatting:
 	// task event ignored resource priority activate start stop ignored
