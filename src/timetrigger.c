@@ -49,7 +49,7 @@ int node_id = 1;
 int enable_sync;
 int enable_gnuplot;
 clockid_t clockid = CLOCK_REALTIME;
-int traceduration = 10;		// trace in 10 seconds
+int traceduration = 3;		// trace during 3 seconds
 
 // start timer
 #define STARTTIMER_INC_IN_NS	5000000		/* 5 ms */
