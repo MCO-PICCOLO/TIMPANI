@@ -20,7 +20,7 @@ boxheight     = 1.0 / maxpacketperflow
 boxovershootl = boxheight * 0
 boxovershootr = boxheight * 0.5
 
-load 'gantt-by-flow.fct'
-#plot 'sched.data' @gantt
+fctfile=system("echo $GP_SCRIPT_DIR/gantt-by-flow.fct")
+load fctfile
 datafile=system("echo $GP_INPUT_FILE")
 plot datafile @gantt
