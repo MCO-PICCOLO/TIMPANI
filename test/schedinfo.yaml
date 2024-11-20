@@ -3,23 +3,44 @@ nodes:
   - id: 2
 tasks:
   - name: wakee1
-    priority: 80
+    priority: 20
     policy: 1
     period: 10000
-    release: 1000
-    allowable_dmisses: 5
+    release: 100
+    allowable_dmisses: 3
     node_id: 1
   - name: wakee2
-    priority: 80
+    priority: 20
     policy: 1
     period: 50000
-    release: 5000
-    allowable_dmisses: 0
+    release: 0
+    allowable_dmisses: 3
     node_id: 1
   - name: wakee3
-    priority: 80
+    priority: 20
     policy: 1
     period: 20000
     release: 2000
-    allowable_dmisses: 10
+    allowable_dmisses: 3
+    node_id: 1
+  - name: wakeeA
+    priority: 30
+    policy: 1
+    period: 10000
+    release: 0
+    allowable_dmisses: 3
+    node_id: 2
+  - name: wakeeB
+    priority: 25
+    policy: 1
+    period: 20000
+    release: 1000
+    allowable_dmisses: 3
+    node_id: 2
+  - name: wakeeC
+    priority: 20
+    policy: 1
+    period: 100000
+    release: 100
+    allowable_dmisses: 3
     node_id: 2
