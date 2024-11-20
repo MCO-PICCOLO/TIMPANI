@@ -1,14 +1,22 @@
 #!/usr/bin/env gnuplot
 reset session
 set term pngcairo font 'Liberation Sans, 11' size 6880, 1080
+#set term pngcairo font 'Liberation Sans, 11' size 11520, 1080
 # set output 'gantt.png'
 
 set colorsequence podo
-set title 'Gantt Chart for Time-triggered Real-time Tasks'
-set offsets 1,1,1,1
-#set xtics 10000
-# display x labels every 10ms
-set xtics 10
+
+# set image title
+set title 'Time-Triggered Scheduling Gantt Chart by Task'
+
+# set page margin
+#set offsets 1,1,1,1
+set offsets 0.5,0.5,0.5,0.5
+
+# display x labels every 500 unit (1 unit is 100us by default)
+set xlabel "Timestamp in 100 us"
+set xtics 0,500
+
 set grid x y
 set key right bottom
 
