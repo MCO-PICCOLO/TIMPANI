@@ -23,6 +23,7 @@ struct time_trigger {
 	struct task_info task;
 #ifdef CONFIG_TRACE_BPF
 	uint64_t sigwait_ts;
+	uint64_t sigwait_ts_prev;
 	uint8_t sigwait_enter;
 #endif
 	struct timespec prev_timer;
@@ -78,16 +79,26 @@ static void tt_timer(union sigval value) {
 
 		// Check if this task is still running
 		if (!tt_node->sigwait_enter) {
-			printf("!!! STILL OVERRUN %s(%d): %lu !!!\n", task->name, task->pid, deadline_ns);
+			printf("!!! DEADLINE MISS: STILL OVERRUN %s(%d): deadline %lu !!!\n",
+				task->name, task->pid, deadline_ns);
 			report_dmiss(trpc_dbus, node_id, task->name);
 		// Check if this task meets the deadline
 		} else if (tt_node->sigwait_ts > deadline_ns) {
-			printf("!!! DEADLINE MISS %s(%d): %lu > %lu !!!\n",
+			printf("!!! DEADLINE MISS %s(%d): %lu > deadline %lu !!!\n",
+				task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
+			write_trace_marker("%s: Deadline miss: %lu diff\n",
+				task->name, tt_node->sigwait_ts - deadline_ns);
+			report_dmiss(trpc_dbus, node_id, task->name);
+		// Check if this task is stuck at kernel sigwait syscall handler
+		} else if (tt_node->sigwait_ts == tt_node->sigwait_ts_prev) {
+			printf("!!! DEADLINE MISS: STUCK AT KERNEL %s(%d): %lu & deadline %lu !!!\n",
 				task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
 			write_trace_marker("%s: Deadline miss: %lu diff\n",
 				task->name, tt_node->sigwait_ts - deadline_ns);
 			report_dmiss(trpc_dbus, node_id, task->name);
 		}
+
+		tt_node->sigwait_ts_prev = tt_node->sigwait_ts;
 	}
 #endif
 
