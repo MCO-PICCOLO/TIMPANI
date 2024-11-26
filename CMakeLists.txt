@@ -110,6 +110,7 @@ target_include_directories(timetrigger
 target_compile_options(timetrigger
 		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
 )
+install(TARGETS timetrigger DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # exprocs test program
 add_executable(exprocs test/exprocs.c)
@@ -122,7 +123,7 @@ target_include_directories(exprocs
 target_compile_options(exprocs
 		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
 )
-#add_executable(exprocs test/exprocs.c)
+install(TARGETS exprocs DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # libtrpc library
 add_subdirectory(libtrpc)
@@ -148,3 +149,5 @@ set_property(TARGET dummy_server
 	APPEND
 	PROPERTY ADDITIONAL_CLEAN_FILES schedinfo.yaml
 )
+install(TARGETS dummy_server DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES ${CMAKE_SOURCE_DIR}/test/schedinfo.yaml TYPE BIN)
