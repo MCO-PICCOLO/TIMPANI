@@ -114,15 +114,6 @@ install(TARGETS timetrigger DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # exprocs test program
 add_executable(exprocs test/exprocs.c)
-target_link_libraries(exprocs
-		ttsched
-)
-target_include_directories(exprocs
-			PUBLIC ${CMAKE_SOURCE_DIR}/src
-)
-target_compile_options(exprocs
-		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
-)
 install(TARGETS exprocs DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # libtrpc library
