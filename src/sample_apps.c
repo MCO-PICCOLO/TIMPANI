@@ -14,7 +14,12 @@
 
 #include "sample_apps.h"
 
+#define ALGO_NSQRT	1
+#define ALGO_FIBO	2
+#define ALGO_BUSY	3
+
 char pr_name[16];
+int algo = ALGO_NSQRT;
 
 /*
  *  stress_cpu_nsqrt()
@@ -93,10 +98,41 @@ static int stress_cpu_fibonacci(void)
 	return EXIT_SUCCESS;
 }
 
+/*
+ *   stress_cpu_busyloop()
+ *	do busy-loop for the given runtime
+ */
+static inline uint64_t get_cpu_time(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+	return ts_ns(ts);
+}
+
+static void stress_cpu_busyloop(int runtime_us)
+{
+	uint64_t start_ns, runtime_ns;
+
+	runtime_ns = runtime_us * NSEC_PER_USEC;
+	start_ns = get_cpu_time();
+	while(1) {
+		if ((get_cpu_time() - start_ns) >= runtime_ns) break;
+	}
+}
+
 static void do_calculations(int loop_count) {
-	for (int i = 0; i < loop_count; i++) {
-		//stress_cpu_fibonacci();
-		stress_cpu_nsqrt();
+	if (algo == ALGO_NSQRT) {
+		for (int i = 0; i < loop_count; i++) {
+			stress_cpu_nsqrt();
+		}
+	}
+	else if (algo == ALGO_FIBO) {
+		for (int i = 0; i < loop_count; i++) {
+			stress_cpu_fibonacci();
+		}
+	} else if (algo == ALGO_BUSY) {
+		stress_cpu_busyloop(loop_count);
 	}
 }
 
@@ -110,7 +146,19 @@ int main(int argc, char *argv[]) {
 	int signal_received = -1;
 	int pid = getpid();
 
+	if (argc < 3) {
+		fprintf(stderr, "Usage: %s name loop_cnt [algo]\n", argv[0]);
+		fprintf(stderr, "algo:\n");
+		fprintf(stderr, "  1: NSQRT (by default)\n");
+		fprintf(stderr, "  2: Fibonacci\n");
+		fprintf(stderr, "  3: Busy loop (loop_cnt means runtime in us\n");
+		return EXIT_FAILURE;
+	}
+
 	int loop_cnt = atoi(argv[2]);
+	if (argc > 3) {
+		algo = atoi(argv[3]);
+	}
 
 	prctl(PR_SET_NAME, (unsigned long)argv[1], 0, 0, 0);
 	prctl(PR_GET_NAME, pr_name, 0, 0, 0);
