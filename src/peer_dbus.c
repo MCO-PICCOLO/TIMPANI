@@ -72,7 +72,12 @@ static int trpc_method_schedinfo(sd_bus_message *m, void *userdata,
 		return sd_bus_reply_method_error(m, error);
 	}
 
+#if LIBSYSTEMD_VERSION >= 248
 	return sd_bus_message_send(reply_m);
+#else
+	/* sd_bus_message_send() is not available before v248, use sd_bus_send() instead */
+	return sd_bus_send(NULL, reply_m, NULL);
+#endif
 }
 
 static int trpc_method_dmiss(sd_bus_message *m, void *userdata,
