@@ -102,6 +102,7 @@ target_link_libraries(timetrigger
 		ttsched
 		trpc
 		systemd
+		rt
 )
 target_include_directories(timetrigger
 			PUBLIC ${CMAKE_SOURCE_DIR}/src
