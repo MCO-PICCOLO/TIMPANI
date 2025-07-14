@@ -17,6 +17,9 @@ sudo apt install -y libelf-dev zlib1g-dev
 ```
 
 clang and linux-tools(bpftool) required for bpf feature
+
+> NOTE: For Ubuntu 20, skip these commands and follow [prerequisites for Ubuntu 20.04](README.Ubuntu20.md) instead.
+
 ```
 sudo apt install -y clang
 sudo apt install -y linux-tools-$(uname -r)
