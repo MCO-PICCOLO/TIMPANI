@@ -24,21 +24,21 @@ void set_affinity(int cpu) {
 	}
 }
 
-static int sched_setattr(pid_t pid, const struct sched_attr *attr,
+static int sched_setattr_tt(pid_t pid, const struct sched_attr_tt *attr,
 			unsigned int flags)
 {
 	return syscall(SYS_sched_setattr, pid, attr, flags);
 }
 
 void set_schedattr(pid_t pid, unsigned int priority, unsigned int policy) {
-	struct sched_attr attr;
+	struct sched_attr_tt attr;
 
 	memset(&attr, 0, sizeof(attr));
-	attr.size = sizeof(struct sched_attr);
+	attr.size = sizeof(struct sched_attr_tt);
 	attr.sched_priority = priority;
 	attr.sched_policy = policy;
 
-	if (sched_setattr(pid, &attr, 0) == -1) {
+	if (sched_setattr_tt(pid, &attr, 0) == -1) {
 		perror("Error calling sched_setattr.");
 	}
 }
