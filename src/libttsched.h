@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-struct sched_attr {
+struct sched_attr_tt {
 	uint32_t size;			/* Size of this structure */
 	uint32_t sched_policy;		/* Policy (SCHED_*)
 					   SCHED_NORMAL            0

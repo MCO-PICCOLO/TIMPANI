@@ -10,13 +10,19 @@
 
 ## Prerequisites
 
+For CentOS, refer to [README.CentOS.md](README.CentOS.md).
+
 libelf-dev and zlib1g-dev required for libbpf submodule
+
 > NOTE: libbpf has been integrated as a git submodule since [CO-RE feature merge](http://mod.lge.com/hub/timpani/time-trigger/-/commit/c4cddcdbfb337c60579014c9f88f56055edf2b38)
 ```
 sudo apt install -y libelf-dev zlib1g-dev
 ```
 
 clang and linux-tools(bpftool) required for bpf feature
+
+> NOTE: For Ubuntu 20, skip these commands and follow [prerequisites for Ubuntu 20.04](README.Ubuntu20.md) instead.
+
 ```
 sudo apt install -y clang
 sudo apt install -y linux-tools-$(uname -r)

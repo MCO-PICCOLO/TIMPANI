@@ -45,7 +45,7 @@ static int report_dmiss(sd_bus *dbus, int node_id, const char *taskname);
 int cpu = -1;
 int prio = -1;
 int port = 7777;
-const char *addr = "localhost";
+const char *addr = "127.0.0.1";
 int node_id = 1;
 int enable_sync;
 int enable_gnuplot;
