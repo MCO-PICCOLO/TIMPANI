@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
+#include <time.h>
 
 #include <libtrpc.h>
 
@@ -114,6 +115,47 @@ static int report_dmiss(sd_bus *dbus)
 	return ret;
 }
 
+static void timespec_to_str(struct timespec *ts, char *str, int len)
+{
+	int ret;
+	struct tm tm;
+
+	gmtime_r(&ts->tv_sec, &tm);
+
+	ret = strftime(str, len, "%F %T", &tm);
+	len -= ret - 1;
+
+	snprintf(str + strlen(str), len, ".%09ld", ts->tv_nsec);
+}
+
+static int wait_for_sync(sd_bus *dbus)
+{
+	int ret;
+	int ack;
+	struct timespec ts;
+
+	while (1) {
+		ret = trpc_client_sync(dbus, CLIENT_NAME, &ack, &ts);
+		if (ret < 0) {
+			fprintf(stderr, "%s:%d: %s\n", __func__, __LINE__, strerror(-ret));
+			return ret;
+		}
+
+		if (ack) {
+			char str[64];
+
+			timespec_to_str(&ts, str, sizeof(str));
+			printf("Sync time: %s (%ld:%ld)\n", str, ts.tv_sec, ts.tv_nsec);
+			break;
+		}
+
+		printf("got NACK !\n");
+		usleep(500000);
+	}
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	sd_event *event = NULL;
@@ -151,6 +193,11 @@ int main(int argc, char *argv[])
 	}
 
 	ret = get_schedinfo(dbus);
+	if (ret < 0) {
+		goto out;
+	}
+
+	ret = wait_for_sync(dbus);
 	if (ret < 0) {
 		goto out;
 	}

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
+#include <time.h>
 
 #include <libtrpc.h>
 
@@ -64,6 +65,21 @@ static void dmiss_callback(const char *name, const char *task)
 	printf("Deadline miss: %s @ %s\n", task, name);
 }
 
+static void sync_callback(const char *name, int *ack, struct timespec *ts)
+{
+	static int sync_count;
+
+	printf("Sync from %s\n", name);
+	if (sync_count++ < 2) {
+		printf("Send NACK to %s\n", name);
+		*ack = 0;
+	} else {
+		printf("Send ACK to %s\n", name);
+		*ack = 1;
+		clock_gettime(CLOCK_REALTIME, ts);
+	}
+}
+
 static void schedinfo_callback(const char *name, void **buf, size_t *bufsize)
 {
 	printf("SchedInfo: %s\n", name);
@@ -117,6 +133,7 @@ int main(int argc, char *argv[])
 		.register_cb = register_callback,
 		.schedinfo_cb = schedinfo_callback,
 		.dmiss_cb = dmiss_callback,
+		.sync_cb = sync_callback,
 	};
 	uint32_t port = SERVER_PORT;
 

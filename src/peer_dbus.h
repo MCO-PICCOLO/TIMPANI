@@ -19,6 +19,7 @@ extern "C" {
 #define TRPC_METHOD_REGISTER	"Register"
 #define TRPC_METHOD_SCHEDINFO	"SchedInfo"
 #define TRPC_METHOD_DMISS	"DMiss"
+#define TRPC_METHOD_SYNC	"Sync"
 
 #ifdef __cplusplus
 }

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # project name and version
-project(libtrpc VERSION 1.0.0 DESCRIPTION "Timpani RPC library")
+project(libtrpc VERSION 2.0.0 DESCRIPTION "Timpani RPC library")
 
 # if pkg-config is not available, run 'sudo apt install pkg-config'
 find_package(PkgConfig REQUIRED)
@@ -34,6 +34,18 @@ install(TARGETS trpc
 	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 	PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
+
+# get the libsystemd version
+if(LIBSYSTEMD_FOUND)
+    execute_process(
+        COMMAND ${PKG_CONFIG_EXECUTABLE} --modversion libsystemd
+        OUTPUT_VARIABLE LIBSYSTEMD_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    message(STATUS "Found libsystemd version: ${LIBSYSTEMD_VERSION}")
+
+    target_compile_definitions(trpc PRIVATE "LIBSYSTEMD_VERSION=${LIBSYSTEMD_VERSION}")
+endif()
 
 # trpc_server test program
 add_executable(trpc_server test/trpc_server.c)
