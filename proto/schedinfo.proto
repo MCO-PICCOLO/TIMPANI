@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package com.lge.timpani.v1;
+
+service TimpaniConnection {
+  // Get SchedInfo from Piccolo
+  rpc GetSchedInfo (Empty) returns (SchedInfo) {}
+
+  // Notify Piccolo about a fault
+  rpc NotifyFault (FaultInfo) returns (Empty) {}
+}
+
+// Empty message for requests and replies that do not require parameters
+message Empty {}
+
+message NodeInfo {
+  string id = 1;
+}
+
+enum SchedPolicy {
+  // SCHED_NORMAL
+  NORMAL = 0;
+  // SCHED_FIFO
+  FIFO = 1;
+  // SCHED_RR
+  RR = 2;
+}
+
+message TaskInfo {
+  // Unique task name
+  string name = 1;
+  // Task priority
+  int32 priority = 2;
+  // Scheduling policy
+  SchedPolicy policy = 3;
+  // Period in us
+  int32 period = 4;
+  // Release time in us
+  int32 release_time = 5;
+  // Runtime in us
+  int32 runtime = 6;
+  // Deadline in us
+  int32 deadline = 7;
+  // Node ID where the task is running
+  string node_id = 8;
+  // Maximum number of deadline misses allowed
+  int32 max_dmiss = 9;
+}
+
+message SchedInfo {
+  repeated NodeInfo nodes = 1;
+  repeated TaskInfo tasks = 2;
+}
+
+enum FaultType {
+  // Unknown fault
+  UNKNOWN = 0;
+  // Deadline miss
+  DMISS = 1;
+}
+
+message FaultInfo {
+  string node_id = 1;
+  string task_name = 2;
+  FaultType type = 3;
+}
