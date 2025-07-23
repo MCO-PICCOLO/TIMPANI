@@ -25,7 +25,7 @@ make
 
 ## Coding style
 
-- TIMPANI-O follows part of the [Microsoft C++ Style Guide]()
+- TIMPANI-O follows part of the Microsoft C++ Style Guide
   - Use 4 spaces for indentation.
   - Use [`Pascal case`](https://en.wiktionary.org/wiki/Pascal_case) or [`upper camel case`](https://en.wikipedia.org/wiki/Camel_case) for function and class names.
   - Use [`snake case`](https://en.wikipedia.org/wiki/Snake_case) for variable names.
@@ -33,6 +33,7 @@ make
   ```
   clang-format --style=microsoft -i <file>
   ```
+- `.editorconfig` is provided to help maintain consistent coding styles.
 
 ## How to run
 
