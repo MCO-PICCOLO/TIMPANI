@@ -33,18 +33,20 @@ message TaskInfo {
   int32 priority = 2;
   // Scheduling policy
   SchedPolicy policy = 3;
+  // CPU affinity
+  uint64 cpu_affinity = 4;
   // Period in us
-  int32 period = 4;
+  int32 period = 5;
   // Release time in us
-  int32 release_time = 5;
+  int32 release_time = 6;
   // Runtime in us
-  int32 runtime = 6;
+  int32 runtime = 7;
   // Deadline in us
-  int32 deadline = 7;
+  int32 deadline = 8;
   // Node ID where the task is running
-  string node_id = 8;
+  string node_id = 9;
   // Maximum number of deadline misses allowed
-  int32 max_dmiss = 9;
+  int32 max_dmiss = 10;
 }
 
 message SchedInfo {

@@ -86,11 +86,13 @@ void PiccoloClient::PrintSchedInfo(const SchedInfo &info)
         }
         std::cout << std::endl;
 
+        std::cout << "  CPU Affinity: 0x" << std::hex << task.cpu_affinity() << std::dec << std::endl;
         std::cout << "  Period: " << task.period() << std::endl;
         std::cout << "  Release Time: " << task.release_time() << std::endl;
         std::cout << "  Runtime: " << task.runtime() << std::endl;
         std::cout << "  Deadline: " << task.deadline() << std::endl;
         std::cout << "  Max Deadline Misses: " << task.max_dmiss() << std::endl;
+        std::cout << "  Node ID: " << task.node_id() << std::endl;
         std::cout << std::endl;
     }
 
