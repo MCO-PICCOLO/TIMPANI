@@ -17,3 +17,6 @@ add_subdirectory(proto)
 
 # Add source directory
 add_subdirectory(src)
+
+# Add libtrpc submodule
+add_subdirectory(${CMAKE_SOURCE_DIR}/external/libtrpc)
