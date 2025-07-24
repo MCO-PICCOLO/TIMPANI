@@ -24,6 +24,9 @@ set_target_properties(trpc PROPERTIES VERSION ${PROJECT_VERSION}
 
 set_target_properties(trpc PROPERTIES PUBLIC_HEADER src/libtrpc.h)
 
+# libsystemd required for library linking
+target_link_libraries(trpc PUBLIC ${LIBSYSTEMD_LIBRARIES})
+
 # library install config
 install(
   TARGETS trpc
