@@ -1,7 +1,7 @@
 # Timpani-O executable
 add_executable(timpani-o
   main.cpp
-  piccolo_client.cpp
+  schedinfo_service.cpp
 )
 target_link_libraries(timpani-o
   PRIVATE
@@ -12,9 +12,7 @@ install(TARGETS timpani-o
   RUNTIME DESTINATION bin
 )
 
-file(CREATE_LINK
-  ${CMAKE_CURRENT_BINARY_DIR}/timpani-o
-  ${CMAKE_BINARY_DIR}/timpani-o
-  SYMBOLIC
-  COPY_ON_ERROR
+set_target_properties(timpani-o
+  PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
 )

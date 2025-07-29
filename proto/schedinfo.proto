@@ -1,20 +1,25 @@
 syntax = "proto3";
 
-package com.lge.timpani.v1;
+package schedinfo.v1;
 
-service TimpaniConnection {
-  // Get SchedInfo from Piccolo
-  rpc GetSchedInfo (Empty) returns (SchedInfo) {}
-
-  // Notify Piccolo about a fault
-  rpc NotifyFault (FaultInfo) returns (Empty) {}
+// SchedInfoService in Timpani-O
+service SchedInfoService {
+  // Add a new SchedInfo
+  // From Piccolo to Timpani-O
+  rpc AddSchedInfo (SchedInfo) returns (Response) {}
 }
 
-// Empty message for requests and replies that do not require parameters
-message Empty {}
+// FaultService in Piccolo
+service FaultService {
+  // Notify a fault
+  // From Timpani-O to Piccolo
+  rpc NotifyFault (FaultInfo) returns (Response) {}
+}
 
-message NodeInfo {
-  string id = 1;
+// Common response message for SchedInfoService and FaultService
+message Response {
+  // Status code: 0 for success, non-zero for error
+  int32 status = 1;
 }
 
 enum SchedPolicy {
@@ -50,7 +55,7 @@ message TaskInfo {
 }
 
 message SchedInfo {
-  repeated NodeInfo nodes = 1;
+  string workload_id = 1;
   repeated TaskInfo tasks = 2;
 }
 
@@ -62,7 +67,8 @@ enum FaultType {
 }
 
 message FaultInfo {
-  string node_id = 1;
-  string task_name = 2;
-  FaultType type = 3;
+  string workload_id = 1;
+  string node_id = 2;
+  string task_name = 3;
+  FaultType type = 4;
 }
