@@ -25,15 +25,14 @@ make
 
 ## Coding style
 
-- TIMPANI-O follows part of the Microsoft C++ Style Guide
+- TIMPANI-O follows the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html) with some modifications:
   - Use 4 spaces for indentation.
-  - Use [`Pascal case`](https://en.wiktionary.org/wiki/Pascal_case) or [`upper camel case`](https://en.wikipedia.org/wiki/Camel_case) for function and class names.
-  - Use [`snake case`](https://en.wikipedia.org/wiki/Snake_case) for variable names.
-- Use `clang-format` to format your code.
+  - Place a line break before the opening brace after function and class definitions
+- Use `clang-format` to format your code with .clang-format file provided in the project root.
   ```
-  clang-format --style=microsoft -i <file>
+  clang-format -i <file>
   ```
-- `.editorconfig` is provided to help maintain consistent coding styles.
+- `.clang-format` and `.editorconfig` are provided to help maintain consistent coding styles.
 
 ## How to run
 

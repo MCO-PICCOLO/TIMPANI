@@ -21,5 +21,4 @@ Additionally, it provides a D-Bus peer-to-peer server that offers the following 
 - Protocol Buffers: For serializing structured data.
 
 ## Coding Style
-- Follow the part of Microsoft's C++ coding style guide
-  - refer to [Coding style](../README.md#coding-style) section in the README.md file.
+- Refer to the Coding style section in the [README.md](../README.md) file.
