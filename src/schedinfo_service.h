@@ -6,8 +6,8 @@
 #include "proto/schedinfo.grpc.pb.h"
 
 using grpc::Server;
-using grpc::ServerContext;
 using grpc::ServerBuilder;
+using grpc::ServerContext;
 using grpc::Status;
 using schedinfo::v1::Response;
 using schedinfo::v1::SchedInfo;
@@ -19,10 +19,10 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
   public:
     SchedInfoServiceImpl();
 
-    Status AddSchedInfo(ServerContext *context,
-        const SchedInfo *request, Response *reply) override;
+    Status AddSchedInfo(ServerContext *context, const SchedInfo *request,
+                        Response *reply) override;
 
   private:
 };
 
-#endif // SCHEDINFO_SERVICE_H
+#endif  // SCHEDINFO_SERVICE_H

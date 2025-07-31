@@ -6,3 +6,4 @@ BraceWrapping:
   AfterClass: true
   AfterFunction: true
   SplitEmptyFunction: true
+AccessModifierOffset: -2
