@@ -2,6 +2,7 @@
 add_executable(timpani-o
   main.cpp
   schedinfo_service.cpp
+  fault_client.cpp
 )
 target_link_libraries(timpani-o
   PRIVATE
