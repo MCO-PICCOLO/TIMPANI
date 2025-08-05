@@ -23,6 +23,7 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
                         Response *reply) override;
 
   private:
+    static const char* SchedPolicyToStr(SchedPolicy policy);
 };
 
 #endif  // SCHEDINFO_SERVICE_H

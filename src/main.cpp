@@ -2,6 +2,7 @@
 #include <string>
 #include <memory>
 
+#include "tlog.h"
 #include "schedinfo_service.h"
 
 void RunSchedInfoServer(int port)
@@ -16,12 +17,17 @@ void RunSchedInfoServer(int port)
     builder.RegisterService(&service);
 
     std::unique_ptr<Server> server(builder.BuildAndStart());
-    std::cout << "Timpani-O SchedInfoService listening on " << server_address << std::endl;
+    TLOG_INFO("Timpani-O SchedInfoService listening on ", server_address);
     server->Wait();
 }
 
 int main(int argc, char **argv)
 {
+    // Initialize the logger
+    TLOG_SET_LOG_LEVEL(LogLevel::DEBUG);
+    TLOG_SET_PRINT_FILENAME(false);
+    TLOG_SET_FULL_TIMESTAMP(false);
+
     // Run the server for SchedInfoService (blocking)
     RunSchedInfoServer(50052);
 
