@@ -14,6 +14,12 @@ using schedinfo::v1::SchedInfo;
 using schedinfo::v1::SchedInfoService;
 using schedinfo::v1::SchedPolicy;
 
+/**
+* @brief Implementation of the SchedInfoService gRPC service
+*
+* This service handles scheduling information deliveries from Piccolo to Timpani-O.
+* It processes SchedInfo messages and returns a Response indicating success or failure.
+*/
 class SchedInfoServiceImpl final : public SchedInfoService::Service
 {
   public:
