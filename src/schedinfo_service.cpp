@@ -78,7 +78,6 @@ bool SchedInfoServer::Start(int port)
     server_thread_ = std::make_unique<std::thread>([this]() {
         server_->Wait();
     });
-    server_thread_->detach();
 
     return true;
 }

@@ -120,18 +120,18 @@ int main(int argc, char **argv)
     // Run the gRPC SchedInfoService server
     std::unique_ptr<SchedInfoServer> sinfo_server;
     if (!RunSchedInfoServer(sinfo_port, sinfo_server)) {
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     // Initialize the gRPC FaultServiceClient
     if (!InitFaultClient(fault_addr, fault_port)) {
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     // Run the DBusServer
     std::unique_ptr<DBusServer> dbus_server;
     if (!RunDBusServer(dbus_port, dbus_server)) {
-        exit(EXIT_FAILURE);
+        return EXIT_FAILURE;
     }
 
     while (true) {
@@ -143,5 +143,5 @@ int main(int argc, char **argv)
         }
     }
 
-    exit(EXIT_SUCCESS);
+    return EXIT_SUCCESS;
 }
