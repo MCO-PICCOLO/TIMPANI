@@ -6,11 +6,28 @@ Refer to [This README.md](http://mod.lge.com/hub/timpani/time-trigger/-/blob/mai
 
 ## Prerequisites
 
-- gRPC & protobuf
+- On Ubuntu
+  - gRPC & protobuf
+    ```
+    sudo apt install -y libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc
+    ```
+  - Prerequisites for libtrpc(D-Bus)
+    ```
+    sudo apt install -y libsystemd-dev
+    ```
 
-```
-sudo apt install -y libgrpc++-dev protobuf-compiler-grpc
-```
+- On CentOS
+  - gRPC & protobuf
+    ```
+    sudo dnf install -y protobuf-devel protobuf-compiler
+    # Enable EPEL(Extra Packages for Enterprise Linux) repository for gRPC
+    sudo dnf install -y epel-release
+    sudo dnf install -y grpc-devel
+    ```
+  - Prerequisites for libtrpc(D-Bus)
+    ```
+    sudo dnf install -y systemd-devel
+    ```
 
 ## Build
 
@@ -36,4 +53,11 @@ make
 
 ## How to run
 
-To be defined
+- To run Timpani-O with default options:
+  ```
+  timpani-o
+  ```
+- To run Timpani-O with specific options, refer to the help message:
+  ```
+  timpani-o -h
+  ```
