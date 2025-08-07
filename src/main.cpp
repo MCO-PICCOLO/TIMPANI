@@ -1,7 +1,6 @@
 #include <iostream>
 #include <string>
 #include <memory>
-#include <thread>
 #include <chrono>
 #include <getopt.h>
 
@@ -10,32 +9,14 @@
 #include "fault_client.h"
 #include "dbus_server.h"
 
-bool RunSchedInfoServer(int port, std::unique_ptr<Server>& server,
-                        std::unique_ptr<std::thread>& server_thread)
+bool RunSchedInfoServer(int port, std::unique_ptr<SchedInfoServer>& server)
 {
-    std::string server_addr = "0.0.0.0";
-    server_addr += ":" + std::to_string(port);
-
-    static SchedInfoServiceImpl service;
-
-    ServerBuilder builder;
-    builder.AddListeningPort(server_addr, grpc::InsecureServerCredentials());
-    builder.AddChannelArgument(GRPC_ARG_ALLOW_REUSEPORT, 0);
-    builder.RegisterService(&service);
-
-    server = builder.BuildAndStart();
-    if (!server) {
-        TLOG_ERROR("Failed to start SchedInfoService on ", server_addr);
+    server = std::make_unique<SchedInfoServer>();
+    if (!server->Start(port)) {
+        TLOG_ERROR("Failed to start SchedInfoServer on port ", port);
         return false;
     }
-    TLOG_INFO("SchedInfoService listening on ", server_addr);
-
-    // Start the server in a separate thread
-    server_thread = std::make_unique<std::thread>([&server]() {
-        server->Wait();
-    });
-    server_thread->detach();
-
+    TLOG_INFO("SchedInfoServer listening on port ", port);
     return true;
 }
 
@@ -136,10 +117,9 @@ int main(int argc, char **argv)
     TLOG_SET_PRINT_FILENAME(false);
     TLOG_SET_FULL_TIMESTAMP(false);
 
-    // Initialize and run the gRPC SchedInfoService server
-    std::unique_ptr<Server> sinfo_server;
-    std::unique_ptr<std::thread> sinfo_server_thread;
-    if (!RunSchedInfoServer(sinfo_port, sinfo_server, sinfo_server_thread)) {
+    // Run the gRPC SchedInfoService server
+    std::unique_ptr<SchedInfoServer> sinfo_server;
+    if (!RunSchedInfoServer(sinfo_port, sinfo_server)) {
         exit(EXIT_FAILURE);
     }
 
@@ -162,10 +142,6 @@ int main(int argc, char **argv)
             }
         }
     }
-
-    // Cleanly shutdown SchedInfoService and join thread
-    sinfo_server->Shutdown();
-    sinfo_server_thread->join();
 
     exit(EXIT_SUCCESS);
 }

@@ -1,6 +1,7 @@
 #ifndef SCHEDINFO_SERVICE_H
 #define SCHEDINFO_SERVICE_H
 
+#include <thread>
 #include <grpcpp/grpcpp.h>
 
 #include "proto/schedinfo.grpc.pb.h"
@@ -30,6 +31,26 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
 
   private:
     static const char* SchedPolicyToStr(SchedPolicy policy);
+};
+
+/**
+ * @brief SchedInfoServer class for managing the SchedInfoService gRPC server
+ *
+ * This class encapsulates the SchedInfoService gRPC server functionality,
+ * allowing it to start and stop the service, and handle incoming requests.
+ */
+class SchedInfoServer
+{
+  public:
+    SchedInfoServer();
+    ~SchedInfoServer();
+    bool Start(int port);
+    void Stop();
+
+ private:
+    SchedInfoServiceImpl service_;
+    std::unique_ptr<Server> server_;
+    std::unique_ptr<std::thread> server_thread_;
 };
 
 #endif  // SCHEDINFO_SERVICE_H

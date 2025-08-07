@@ -46,3 +46,49 @@ const char* SchedInfoServiceImpl::SchedPolicyToStr(SchedPolicy policy)
             return "UNKNOWN";
     }
 }
+
+SchedInfoServer::SchedInfoServer()
+    : server_(nullptr),
+      server_thread_(nullptr)
+{
+}
+
+SchedInfoServer::~SchedInfoServer()
+{
+    Stop();
+}
+
+bool SchedInfoServer::Start(int port)
+{
+    std::string server_addr = "0.0.0.0";
+    server_addr += ":" + std::to_string(port);
+
+    ServerBuilder builder;
+    builder.AddListeningPort(server_addr, grpc::InsecureServerCredentials());
+    builder.AddChannelArgument(GRPC_ARG_ALLOW_REUSEPORT, 0);
+    builder.RegisterService(&service_);
+
+    server_ = builder.BuildAndStart();
+    if (!server_) {
+        TLOG_ERROR("Failed to start SchedInfoService on ", server_addr);
+        return false;
+    }
+
+    // Start the server in a separate thread
+    server_thread_ = std::make_unique<std::thread>([this]() {
+        server_->Wait();
+    });
+    server_thread_->detach();
+
+    return true;
+}
+
+void SchedInfoServer::Stop()
+{
+    if (server_) {
+        server_->Shutdown();
+    }
+    if(server_thread_ && server_thread_->joinable()) {
+        server_thread_->join();
+    }
+}
