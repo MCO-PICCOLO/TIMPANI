@@ -639,9 +639,11 @@ int main(int argc, char *argv[])
 	settimer = set_stoptracer_timer(traceduration, &tracetimer);
 	tracer_on();
 
+#if defined(CONFIG_TRACE_EVENT) || defined(CONFIG_TRACE_BPF_EVENT)
 	struct timespec now;
 	clock_gettime(clockid, &now);
 	printf("tracer_on!!!: %ld\n", ts_ns(now));
+#endif
 
 	struct time_trigger *tt_p;
 	LIST_FOREACH(tt_p, &lh, entry)

@@ -7,7 +7,7 @@ project(timetrigger VERSION 0.1.0 DESCRIPTION "Timpani Time Trigger")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
 
 # libtttrace build options
-option(CONFIG_TRACE_EVENT "Enable event tracing" ON)
+option(CONFIG_TRACE_EVENT "Enable event tracing" OFF)
 option(CONFIG_TRACE_BPF "Enable eBPF support" ON)
 option(CONFIG_TRACE_BPF_EVENT "Enable eBPF-based event tracing" OFF)
 
