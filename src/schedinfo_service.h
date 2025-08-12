@@ -1,6 +1,9 @@
 #ifndef SCHEDINFO_SERVICE_H
 #define SCHEDINFO_SERVICE_H
 
+#include <map>
+#include <memory>
+#include <shared_mutex>
 #include <thread>
 #include <grpcpp/grpcpp.h>
 
@@ -14,6 +17,9 @@ using schedinfo::v1::Response;
 using schedinfo::v1::SchedInfo;
 using schedinfo::v1::SchedInfoService;
 using schedinfo::v1::SchedPolicy;
+using schedinfo::v1::TaskInfo;
+
+using SchedInfoMap = std::map<std::string, std::vector<TaskInfo>>;
 
 /**
 * @brief Implementation of the SchedInfoService gRPC service
@@ -26,11 +32,18 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
   public:
     SchedInfoServiceImpl();
 
-    Status AddSchedInfo(ServerContext *context, const SchedInfo *request,
-                        Response *reply) override;
+    Status AddSchedInfo(ServerContext* context, const SchedInfo* request,
+                        Response* reply) override;
+
+    SchedInfoMap GetSchedInfoMap() const;
 
   private:
     static const char* SchedPolicyToStr(SchedPolicy policy);
+
+    // Member variable to store scheduling information
+    SchedInfoMap sched_info_map_;
+    // Use shared_mutex for sched_info_map_
+    mutable std::shared_mutex sched_info_mutex_;
 };
 
 /**
@@ -46,6 +59,8 @@ class SchedInfoServer
     ~SchedInfoServer();
     bool Start(int port);
     void Stop();
+    SchedInfoMap GetSchedInfoMap() const;
+    void DumpSchedInfo();
 
  private:
     SchedInfoServiceImpl service_;
