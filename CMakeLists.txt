@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # project name and version
-project(timetrigger VERSION 0.1.0 DESCRIPTION "Timpani Time Trigger")
+project(timetrigger VERSION 1.0.0 DESCRIPTION "Timpani Time Trigger")
 
 # Set cmake module path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
