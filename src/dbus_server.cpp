@@ -1,32 +1,36 @@
 #include "tlog.h"
 #include "dbus_server.h"
 
+DBusServer& DBusServer::GetInstance()
+{
+    static DBusServer instance;
+    return instance;
+}
+
 DBusServer::DBusServer()
-        : event_source_(nullptr),
-          event_(nullptr),
-          server_fd_(-1),
-          running_(false)
+    : event_source_(nullptr),
+      event_(nullptr),
+      event_thread_(nullptr),
+      server_fd_(-1),
+      running_(false),
+      sched_info_server_(nullptr),
+      sched_info_buf_(nullptr)
 {
 }
 
-DBusServer::~DBusServer()
-{
-    Cleanup();
-}
+DBusServer::~DBusServer() { Stop(); }
 
-bool DBusServer::Start(int port)
+bool DBusServer::Start(int port, SchedInfoServer* sinfo_server)
 {
     if (running_.load()) {
         TLOG_WARN("DBusServer is already running");
         return false;
     }
 
-    static trpc_server_ops_t trpc_ops = {
-        .register_cb = RegisterCallback,
-        .schedinfo_cb = SchedInfoCallback,
-        .dmiss_cb = DMissCallback,
-        .sync_cb = SyncCallback
-    };
+    static trpc_server_ops_t trpc_ops = {.register_cb = RegisterCallback,
+                                         .schedinfo_cb = SchedInfoCallback,
+                                         .dmiss_cb = DMissCallback,
+                                         .sync_cb = SyncCallback};
     int ret;
 
     // Do not use sd_event_default() here.
@@ -40,40 +44,41 @@ bool DBusServer::Start(int port)
     ret = trpc_server_create(port, event_, &event_source_, &trpc_ops);
     if (ret < 0) {
         TLOG_ERROR("trpc_server_create failed: ", strerror(-ret));
-        Cleanup();
+        Stop();
         return false;
     }
     server_fd_ = ret;
 
-    running_.store(true);
+    SetSchedInfoServer(sinfo_server);
+
     // Start the event loop in a separate thread
-    event_thread_ = std::thread(&DBusServer::EventLoop, this);
-    if (!event_thread_.joinable()) {
+    event_thread_ = std::make_unique<std::thread>(&DBusServer::EventLoop, this);
+    if (!event_thread_->joinable()) {
         TLOG_ERROR("DBusServer thread failed to start");
-        Cleanup();
+        Stop();
         return false;
     }
+    running_.store(true);
 
     return true;
 }
 
 void DBusServer::Stop()
 {
-    if (!running_.load()) {
-        return;
-    }
-    running_.store(false);
-
-    if (event_thread_.joinable()) {
-        event_thread_.join();
-    }
-}
-
-void DBusServer::Cleanup()
-{
     if (running_.load()) {
-        Stop();
+        running_.store(false);
+
+        if (event_thread_ && event_thread_->joinable()) {
+            event_thread_->join();
+        }
     }
+
+    if (sched_info_buf_) {
+        free_serial_buf(sched_info_buf_);
+        sched_info_buf_ = nullptr;
+    }
+
+    SetSchedInfoServer(nullptr);
 
     if (event_source_) {
         event_source_ = sd_event_source_unref(event_source_);
@@ -87,6 +92,11 @@ void DBusServer::Cleanup()
     }
 }
 
+void DBusServer::SetSchedInfoServer(SchedInfoServer* server)
+{
+    sched_info_server_ = server;
+}
+
 void DBusServer::EventLoop()
 {
     while (running_.load()) {
@@ -98,29 +108,91 @@ void DBusServer::EventLoop()
     }
 }
 
-void DBusServer::RegisterCallback(const char *name)
+bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
 {
+    // Return true if buffer is already allocated
+    if (sched_info_buf_) return true;
+
+    // FIXME: Currently only serialize the first workload in schedule info
+    auto tasks = map.begin()->second;
+    if (tasks.empty()) {
+        TLOG_WARN("No tasks in schedule info");
+        return false;
+    }
+
+    sched_info_buf_ = new_serial_buf(1024);
+    if (!sched_info_buf_) {
+        TLOG_ERROR("Failed to allocate memory for schedule info buffer");
+        return false;
+    }
+
+    // Pack task info entries into serial buffer
+    for (const auto& task : tasks) {
+        serialize_int32_t(sched_info_buf_, 0);  // unused dummy pid
+        std::string task_name = task.name();
+        task_name.resize(15);
+        serialize_str(sched_info_buf_, task_name.c_str());
+        serialize_int32_t(sched_info_buf_, task.priority());
+        serialize_int32_t(sched_info_buf_, task.policy());
+        serialize_int32_t(sched_info_buf_, task.period());
+        serialize_int32_t(sched_info_buf_, task.release_time());
+        serialize_int32_t(sched_info_buf_, task.max_dmiss());
+        // FIXME: introduce string-type node_id on Timpani-N
+        serialize_int32_t(sched_info_buf_, std::stoi(task.node_id()));
+    }
+
+    // Pack extra scheduling info into serial buffer
+    // FIXME: remove unused items
+    char container_id[64];
+    memset(container_id, '0', sizeof(container_id));
+    serialize_blob(sched_info_buf_, container_id, sizeof(container_id));
+    serialize_int32_t(sched_info_buf_, 0);             // container_rt_runtime
+    serialize_int32_t(sched_info_buf_, 0);             // container_rt_period
+    serialize_int64_t(sched_info_buf_, 0);             // cpumask
+    serialize_int32_t(sched_info_buf_, 0);             // container_period
+    serialize_int32_t(sched_info_buf_, 0);             // pod_period
+    serialize_int32_t(sched_info_buf_, tasks.size());  // nr_tasks
+
+    TLOG_DEBUG("Serialized sched_info_buf_: ", sched_info_buf_->pos, " bytes");
+
+    return true;
+}
+
+void DBusServer::RegisterCallback(const char* name)
+{
+    // FIXME: Currently not being used by Timpani-N
     TLOG_INFO("RegisterCallback with name: ", name);
 }
 
-void DBusServer::SchedInfoCallback(const char *name, void **buf,
-                                   size_t *bufsize)
+void DBusServer::SchedInfoCallback(const char* name, void** buf,
+                                   size_t* bufsize)
 {
     TLOG_INFO("SchedInfoCallback with name: ", name);
 
+    DBusServer& instance = GetInstance();
+    if (instance.sched_info_server_) {
+        auto sched_info_map = instance.sched_info_server_->GetSchedInfoMap();
+        if (!sched_info_map.empty() &&
+            instance.SerializeSchedInfo(sched_info_map)) {
+            *buf = instance.sched_info_buf_->data;
+            *bufsize = instance.sched_info_buf_->pos;
+            return;
+        }
+    }
+
+    TLOG_WARN("No schedule info available");
     if (buf && bufsize) {
         *buf = nullptr;  // No actual data to return
         *bufsize = 0;
     }
 }
 
-void DBusServer::DMissCallback(const char *name, const char *task)
+void DBusServer::DMissCallback(const char* name, const char* task)
 {
     TLOG_INFO("DMissCallback with name: ", name, ", task: ", task);
 }
 
-void DBusServer::SyncCallback(const char *name, int *ack,
-                              struct timespec *ts)
+void DBusServer::SyncCallback(const char* name, int* ack, struct timespec* ts)
 {
     TLOG_INFO("SyncCallback with name: ", name);
     if (ack) {

@@ -2,6 +2,7 @@
 #include <string>
 #include <memory>
 #include <chrono>
+#include <thread>
 #include <getopt.h>
 
 #include "tlog.h"
@@ -35,10 +36,10 @@ bool NotifyFaultDemo()
     return client.NotifyFault("workload_demo", "node_demo", "task_demo", FaultType::DMISS);
 }
 
-bool RunDBusServer(int port, std::unique_ptr<DBusServer>& server)
+bool RunDBusServer(int port, SchedInfoServer* sinfo_server)
 {
-    server = std::make_unique<DBusServer>();
-    if (!server->Start(port)) {
+    DBusServer& server = DBusServer::GetInstance();
+    if (!server.Start(port, sinfo_server)) {
         TLOG_ERROR("Failed to start DBusServer on port ", port);
         return false;
     }
@@ -129,8 +130,7 @@ int main(int argc, char **argv)
     }
 
     // Run the DBusServer
-    std::unique_ptr<DBusServer> dbus_server;
-    if (!RunDBusServer(dbus_port, dbus_server)) {
+    if (!RunDBusServer(dbus_port, sinfo_server.get())) {
         return EXIT_FAILURE;
     }
 
