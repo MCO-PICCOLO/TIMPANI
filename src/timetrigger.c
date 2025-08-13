@@ -39,14 +39,14 @@ static sd_event *trpc_event;
 static sd_bus *trpc_dbus;
 
 static void remove_tt_node(struct time_trigger *tt_node);
-static int report_dmiss(sd_bus *dbus, int node_id, const char *taskname);
+static int report_dmiss(sd_bus *dbus, char *node_id, const char *taskname);
 
 // default option values
 int cpu = -1;
 int prio = -1;
 int port = 7777;
 const char *addr = "127.0.0.1";
-int node_id = 1;
+char node_id[TINFO_NODEID_MAX] = "1";
 int enable_sync;
 int enable_gnuplot;
 clockid_t clockid = CLOCK_REALTIME;
@@ -236,7 +236,7 @@ static inline void write_gnuplot_data(struct schedstat_event *e, const char *tna
 	if (ts_first == 0) {
 		char fname[32];
 
-		snprintf(fname, sizeof(fname), "node%d.gpdata", node_id);
+		snprintf(fname, sizeof(fname), "node-%s.gpdata", node_id);
 		gpfile = fopen(fname, "w+");
 		if (gpfile == NULL) {
 			enable_gnuplot = 0;
@@ -263,7 +263,7 @@ static inline void write_gnuplot_data(struct schedstat_event *e, const char *tna
 
 	// Column formatting:
 	// task event ignored resource priority activate start stop ignored
-	fprintf(gpfile, "%-16s 0 0 N%dC%d 0 %lu %lu %lu 0\n",
+	fprintf(gpfile, "%-16s 0 0 N%sC%d 0 %lu %lu %lu 0\n",
 		tname, node_id, e->cpu, ts_wakeup, ts_start, ts_stop);
 }
 
@@ -322,23 +322,9 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 
 	// Unpack sched_info
 	deserialize_int32_t(sbuf, &sinfo->nr_tasks);
-	deserialize_int32_t(sbuf, &sinfo->pod_period);
-	deserialize_int32_t(sbuf, &sinfo->container_period);
-	deserialize_int64_t(sbuf, &sinfo->cpumask);
-	deserialize_int32_t(sbuf, &sinfo->container_rt_period);
-	deserialize_int32_t(sbuf, &sinfo->container_rt_runtime);
-	cid_size = sizeof(sinfo->container_id);
-	deserialize_blob(sbuf, sinfo->container_id, &cid_size);
-
 	sinfo->tasks = NULL;
 
 #if 0
-	printf("sinfo->container_id: %.*s\n", cid_size, sinfo->container_id);
-	printf("sinfo->container_rt_runtime: %u\n", sinfo->container_rt_runtime);
-	printf("sinfo->container_rt_period: %u\n", sinfo->container_rt_period);
-	printf("sinfo->cpumask: %"PRIx64"\n", sinfo->cpumask);
-	printf("sinfo->container_period: %u\n", sinfo->container_period);
-	printf("sinfo->pod_period: %u\n", sinfo->pod_period);
 	printf("sinfo->nr_tasks: %u\n", sinfo->nr_tasks);
 #endif
 
@@ -350,44 +336,45 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 			return -1;
 		}
 
-		deserialize_int32_t(sbuf, &tinfo->node_id);
+		deserialize_str(sbuf, tinfo->node_id);
 		deserialize_int32_t(sbuf, &tinfo->allowable_deadline_misses);
+		deserialize_int64_t(sbuf, &tinfo->cpu_affinity);
+		deserialize_int32_t(sbuf, &tinfo->deadline);
+		deserialize_int32_t(sbuf, &tinfo->runtime);
 		deserialize_int32_t(sbuf, &tinfo->release_time);
 		deserialize_int32_t(sbuf, &tinfo->period);
 		deserialize_int32_t(sbuf, &tinfo->sched_policy);
 		deserialize_int32_t(sbuf, &tinfo->sched_priority);
 		deserialize_str(sbuf, tinfo->name);
-		deserialize_int32_t(sbuf, &tinfo->pid);
 
 		tinfo->next = sinfo->tasks;
 		sinfo->tasks = tinfo;
 
-#if 0
-		printf("tinfo->pid: %u\n", tinfo->pid);
+#if 1
 		printf("tinfo->name: %s\n", tinfo->name);
 		printf("tinfo->sched_priority: %d\n", tinfo->sched_priority);
 		printf("tinfo->sched_policy: %d\n", tinfo->sched_policy);
 		printf("tinfo->period: %d\n", tinfo->period);
 		printf("tinfo->release_time: %d\n", tinfo->release_time);
+		printf("tinfo->runtime: %d\n", tinfo->release_time);
+		printf("tinfo->deadline: %d\n", tinfo->release_time);
+		printf("tinfo->cpu_affinity: 0x%lx\n", tinfo->cpu_affinity);
 		printf("tinfo->allowable_deadline_misses: %d\n", tinfo->allowable_deadline_misses);
-		printf("tinfo->node_id: %u\n", tinfo->node_id);
+		printf("tinfo->node_id: %s\n", tinfo->node_id);
 #endif
 	}
 
 	return 0;
 }
 
-static int get_schedinfo(sd_bus *dbus, int node_id)
+static int get_schedinfo(sd_bus *dbus, char *node_id)
 {
 	int ret;
 	void *buf = NULL;
 	size_t bufsize;
 	serial_buf_t *sbuf = NULL;
-	char node_str[4];
 
-	snprintf(node_str, sizeof(node_str), "%u", node_id);
-
-	ret = trpc_client_schedinfo(dbus, node_str, &buf, &bufsize);
+	ret = trpc_client_schedinfo(dbus, node_id, &buf, &bufsize);
 	if (ret < 0) {
 		return ret;
 	}
@@ -410,18 +397,15 @@ static int get_schedinfo(sd_bus *dbus, int node_id)
 	return 0;
 }
 
-static int sync_timer(sd_bus *dbus, int node_id, struct timespec *ts_ptr)
+static int sync_timer(sd_bus *dbus, char *node_id, struct timespec *ts_ptr)
 {
 	int ret;
 	int ack;
-	char node_str[4];
-
-	snprintf(node_str, sizeof(node_str), "%u", node_id);
 
 	printf("Sync");
 	fflush(stdout);
 	while (1) {
-		ret = trpc_client_sync(dbus, node_str, &ack, ts_ptr);
+		ret = trpc_client_sync(dbus, node_id, &ack, ts_ptr);
 		if (ret < 0) {
 			return ret;
 		}
@@ -446,14 +430,11 @@ static void remove_tt_node(struct time_trigger *tt_node) {
 	free(tt_node);
 }
 
-static int report_dmiss(sd_bus *dbus, int node_id, const char *taskname)
+static int report_dmiss(sd_bus *dbus, char *node_id, const char *taskname)
 {
 	int ret;
-	char node_str[4];
 
-	snprintf(node_str, sizeof(node_str), "%u", node_id);
-
-	return trpc_client_dmiss(dbus, node_str, taskname);
+	return trpc_client_dmiss(dbus, node_id, taskname);
 }
 
 static int get_options(int argc, char *argv[])
@@ -475,7 +456,7 @@ static int get_options(int argc, char *argv[])
 			traceduration = atoi(optarg);
 			break;
 		case 'n':
-			node_id = atoi(optarg);
+			strncpy(node_id, optarg, sizeof(node_id) - 1);
 			break;
 		case 's':
 			enable_sync = 1;
@@ -491,7 +472,7 @@ static int get_options(int argc, char *argv[])
 					"  -P <prio>\tRT priority (1~99) for timetrigger\n"
 					"  -p <port>\tport to connect to\n"
 					"  -t <seconds>\ttrace duration in seconds\n"
-					"  -n <node id>\tNode ID number\n"
+					"  -n <node id>\tNode ID\n"
 					"  -s\tEnable timer synchronization across multiple nodes\n"
 					"  -g\tEnable saving gnuplot data file by using BPF (node<id>.gpdata)\n"
 					"  -h\tshow this help\n",
@@ -506,7 +487,7 @@ static int get_options(int argc, char *argv[])
 	return 0;
 }
 
-static void init_time_trigger_list(struct listhead *lh_ptr, int node_id)
+static void init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
 {
 	LIST_INIT(lh_ptr);
 
@@ -514,7 +495,7 @@ static void init_time_trigger_list(struct listhead *lh_ptr, int node_id)
 		struct time_trigger *tt_node;
 		unsigned int pid, priority, policy;
 
-		if (node_id != ti->node_id) {
+		if (strcmp(node_id, ti->node_id) != 0) {
 			/* The task does not belong to this node. */
 			continue;
 		}
