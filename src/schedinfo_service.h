@@ -8,6 +8,7 @@
 #include <grpcpp/grpcpp.h>
 
 #include "proto/schedinfo.grpc.pb.h"
+#include "node_config.h"  // Include NodeConfigManager
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -30,7 +31,7 @@ using SchedInfoMap = std::map<std::string, std::vector<TaskInfo>>;
 class SchedInfoServiceImpl final : public SchedInfoService::Service
 {
   public:
-    SchedInfoServiceImpl();
+    explicit SchedInfoServiceImpl(std::shared_ptr<NodeConfigManager> node_config_manager = nullptr);
 
     Status AddSchedInfo(ServerContext* context, const SchedInfo* request,
                         Response* reply) override;
@@ -44,6 +45,8 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
     SchedInfoMap sched_info_map_;
     // Use shared_mutex for sched_info_map_
     mutable std::shared_mutex sched_info_mutex_;
+    // Node configuration manager
+    std::shared_ptr<NodeConfigManager> node_config_manager_;
 };
 
 /**
@@ -55,7 +58,7 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
 class SchedInfoServer
 {
   public:
-    SchedInfoServer();
+    explicit SchedInfoServer(std::shared_ptr<NodeConfigManager> node_config_manager = nullptr);
     ~SchedInfoServer();
     bool Start(int port);
     void Stop();

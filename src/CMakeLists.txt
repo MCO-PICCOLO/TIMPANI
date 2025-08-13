@@ -4,6 +4,7 @@ add_executable(timpani-o
   schedinfo_service.cpp
   fault_client.cpp
   dbus_server.cpp
+  node_config.cpp
 )
 
 target_include_directories(timpani-o

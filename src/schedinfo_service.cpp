@@ -1,8 +1,15 @@
 #include "tlog.h"
 #include "schedinfo_service.h"
 
-SchedInfoServiceImpl::SchedInfoServiceImpl()
+SchedInfoServiceImpl::SchedInfoServiceImpl(std::shared_ptr<NodeConfigManager> node_config_manager)
+    : node_config_manager_(node_config_manager)
 {
+    TLOG_INFO("SchedInfoServiceImpl created with internal scheduling and node configuration");
+    if (node_config_manager_ && node_config_manager_->IsLoaded()) {
+        TLOG_INFO("Node configuration loaded with ", node_config_manager_->GetAllNodes().size(), " nodes");
+    } else {
+        TLOG_INFO("Using default node configuration");
+    }
 }
 
 Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
@@ -69,8 +76,10 @@ const char* SchedInfoServiceImpl::SchedPolicyToStr(SchedPolicy policy)
     }
 }
 
-SchedInfoServer::SchedInfoServer() : server_(nullptr), server_thread_(nullptr)
+SchedInfoServer::SchedInfoServer(std::shared_ptr<NodeConfigManager> node_config_manager)
+	: server_(nullptr), server_thread_(nullptr)
 {
+    TLOG_INFO("SchedInfoServer created with node configuration");
 }
 
 SchedInfoServer::~SchedInfoServer() { Stop(); }
