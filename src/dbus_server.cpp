@@ -120,18 +120,34 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
         return false;
     }
 
+    // Allocate serial buffer and pack schedule info into it
     sched_info_buf_ = new_serial_buf(1024);
     if (!sched_info_buf_) {
         TLOG_ERROR("Failed to allocate memory for schedule info buffer");
         return false;
     }
 
-    // Pack task info entries into serial buffer
+#if 0  // with Timpani-N v2.0
+    for (const auto& task : tasks) {
+        serialize_str(sched_info_buf_,
+                      task.name().substr(0, 16 - 1).c_str());
+        serialize_int32_t(sched_info_buf_, task.priority());
+        serialize_int32_t(sched_info_buf_, task.policy());
+        serialize_int32_t(sched_info_buf_, task.period());
+        serialize_int32_t(sched_info_buf_, task.release_time());
+        serialize_int32_t(sched_info_buf_, task.runtime());
+        serialize_int32_t(sched_info_buf_, task.deadline());
+        serialize_int64_t(sched_info_buf_, task.cpu_affinity());
+        serialize_int32_t(sched_info_buf_, task.max_dmiss());
+        serialize_str(sched_info_buf_,
+                      task.node_id().substr(0, 64 - 1).c_str());
+    }
+    serialize_int32_t(sched_info_buf_, tasks.size());  // nr_tasks
+#else // with Timpani-N v1.0
     for (const auto& task : tasks) {
         serialize_int32_t(sched_info_buf_, 0);  // unused dummy pid
-        std::string task_name = task.name();
-        task_name.resize(15);
-        serialize_str(sched_info_buf_, task_name.c_str());
+        serialize_str(sched_info_buf_,
+                      task.name().substr(0, 16 - 1).c_str());
         serialize_int32_t(sched_info_buf_, task.priority());
         serialize_int32_t(sched_info_buf_, task.policy());
         serialize_int32_t(sched_info_buf_, task.period());
@@ -152,6 +168,7 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
     serialize_int32_t(sched_info_buf_, 0);             // container_period
     serialize_int32_t(sched_info_buf_, 0);             // pod_period
     serialize_int32_t(sched_info_buf_, tasks.size());  // nr_tasks
+#endif
 
     TLOG_DEBUG("Serialized sched_info_buf_: ", sched_info_buf_->pos, " bytes");
 
