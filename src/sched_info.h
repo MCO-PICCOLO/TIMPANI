@@ -8,7 +8,7 @@
  * @brief Individual task schedule information
  */
 typedef struct {
-    char task_name[64];          // Task name
+    char task_name[16];          // Task name
     uint64_t period_ns;          // Period in nanoseconds
     uint64_t runtime_ns;         // Runtime in nanoseconds
     uint64_t deadline_ns;        // Deadline in nanoseconds

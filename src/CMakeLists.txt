@@ -5,6 +5,8 @@ add_executable(timpani-o
   fault_client.cpp
   dbus_server.cpp
   node_config.cpp
+  global_scheduler.cpp
+  scheduler_utils.cpp
 )
 
 target_include_directories(timpani-o

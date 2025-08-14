@@ -9,6 +9,7 @@
 
 #include "proto/schedinfo.grpc.pb.h"
 #include "node_config.h"  // Include NodeConfigManager
+#include "global_scheduler.h"  // Include GlobalScheduler
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -20,7 +21,7 @@ using schedinfo::v1::SchedInfoService;
 using schedinfo::v1::SchedPolicy;
 using schedinfo::v1::TaskInfo;
 
-using SchedInfoMap = std::map<std::string, std::vector<TaskInfo>>;
+using SchedInfoMap = std::map<std::string, sched_info_t>;
 
 /**
 * @brief Implementation of the SchedInfoService gRPC service
@@ -41,12 +42,17 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
   private:
     static const char* SchedPolicyToStr(SchedPolicy policy);
 
+    // Convert gRPC TaskInfo to internal Task structure
+    std::vector<Task> ConvertTaskInfoToTasks(const SchedInfo* request);
+
     // Member variable to store scheduling information
     SchedInfoMap sched_info_map_;
     // Use shared_mutex for sched_info_map_
     mutable std::shared_mutex sched_info_mutex_;
     // Node configuration manager
     std::shared_ptr<NodeConfigManager> node_config_manager_;
+    // Global scheduler
+    std::shared_ptr<GlobalScheduler> global_scheduler_;
 };
 
 /**

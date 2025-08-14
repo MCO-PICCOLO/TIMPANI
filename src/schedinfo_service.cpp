@@ -4,7 +4,11 @@
 SchedInfoServiceImpl::SchedInfoServiceImpl(std::shared_ptr<NodeConfigManager> node_config_manager)
     : node_config_manager_(node_config_manager)
 {
-    TLOG_INFO("SchedInfoServiceImpl created with internal scheduling and node configuration");
+    TLOG_INFO("SchedInfoServiceImpl created with GlobalScheduler integration");
+
+    // Create GlobalScheduler instance
+    global_scheduler_ = std::make_shared<GlobalScheduler>(node_config_manager_);
+
     if (node_config_manager_ && node_config_manager_->IsLoaded()) {
         TLOG_INFO("Node configuration loaded with ", node_config_manager_->GetAllNodes().size(), " nodes");
     } else {
@@ -18,6 +22,7 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
 {
     TLOG_INFO("Received SchedInfo: ", request->workload_id(), " with ",
               request->tasks_size(), " tasks");
+
     // Print detailed task information
     for (int i = 0; i < request->tasks_size(); i++) {
         const auto& task = request->tasks(i);
@@ -43,17 +48,76 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
         return Status::OK;
     }
 
-    // Store the scheduling information in sched_info_map_
-    std::vector<TaskInfo> task_vector;
-    task_vector.reserve(request->tasks_size());
-    std::copy(request->tasks().begin(), request->tasks().end(),
-              std::back_inserter(task_vector));
-    sched_info_map_[request->workload_id()] = task_vector;
+    // Convert gRPC TaskInfo to internal Task structures
+    std::vector<Task> tasks = ConvertTaskInfoToTasks(request);
+
+    // Use GlobalScheduler to process tasks
+    global_scheduler_->clear();
+    global_scheduler_->set_tasks(tasks);
+
+    // Execute scheduling algorithm
+    bool scheduling_success = global_scheduler_->schedule("best_fit_decreasing");
+
+    if (scheduling_success) {
+        // Get scheduled results from GlobalScheduler
+        const auto& scheduled_map = global_scheduler_->get_sched_info_map();
+
+        // Store in our sched_info_map_ (copy the results)
+        for (const auto& pair : scheduled_map) {
+            sched_info_map_[pair.first] = pair.second;
+        }
+
+        TLOG_INFO("Successfully scheduled ", global_scheduler_->get_total_scheduled_tasks(),
+                  " tasks across ", scheduled_map.size(), " nodes");
+        reply->set_status(0);  // Success
+    } else {
+        TLOG_ERROR("Scheduling failed for workload: ", request->workload_id());
+        reply->set_status(-1);  // Indicate failure
+    }
 
     lock.unlock();
-
-    reply->set_status(0);  // Success
     return Status::OK;
+}
+
+std::vector<Task> SchedInfoServiceImpl::ConvertTaskInfoToTasks(const SchedInfo* request)
+{
+    std::vector<Task> tasks;
+    tasks.reserve(request->tasks_size());
+
+    for (int i = 0; i < request->tasks_size(); i++) {
+        const auto& grpc_task = request->tasks(i);
+
+        Task task;
+        task.name = grpc_task.name();
+        task.priority = grpc_task.priority();
+        task.period_us = grpc_task.period();
+        task.runtime_us = grpc_task.runtime();
+        task.deadline_us = grpc_task.deadline();
+        task.target_node = grpc_task.node_id();
+
+        // Convert CPU affinity from hex to string
+        if (grpc_task.cpu_affinity() == 0xFFFFFFFF || grpc_task.cpu_affinity() == 0) {
+            task.affinity = "any";
+        } else {
+            // Find the first set bit (assuming single CPU affinity for now)
+            int cpu_id = 0;
+            uint32_t affinity = grpc_task.cpu_affinity();
+            while (affinity > 1) {
+                affinity >>= 1;
+                cpu_id++;
+            }
+            task.affinity = std::to_string(cpu_id);
+        }
+
+        // Set reasonable defaults for other fields
+        task.memory_mb = 256;  // Default memory requirement
+        task.assigned_node = "";  // Will be set by scheduler
+        task.assigned_cpu = -1;   // Will be set by scheduler
+
+        tasks.push_back(task);
+    }
+
+    return tasks;
 }
 
 SchedInfoMap SchedInfoServiceImpl::GetSchedInfoMap() const
@@ -77,7 +141,7 @@ const char* SchedInfoServiceImpl::SchedPolicyToStr(SchedPolicy policy)
 }
 
 SchedInfoServer::SchedInfoServer(std::shared_ptr<NodeConfigManager> node_config_manager)
-	: server_(nullptr), server_thread_(nullptr)
+	: service_(node_config_manager), server_(nullptr), server_thread_(nullptr)
 {
     TLOG_INFO("SchedInfoServer created with node configuration");
 }
@@ -127,27 +191,26 @@ void SchedInfoServer::DumpSchedInfo()
     const SchedInfoMap sched_info_map = service_.GetSchedInfoMap();
 
     if (sched_info_map.empty()) {
-        // No schedule info available
+        TLOG_INFO("No schedule info available");
         return;
     }
+
     TLOG_INFO("Dumping SchedInfoMap:");
     for (const auto& entry : sched_info_map) {
-        const std::string& workload_id = entry.first;
-        const std::vector<TaskInfo>& tasks = entry.second;
-        TLOG_INFO("Workload ID: ", workload_id, " with ", tasks.size(),
-                  " tasks");
-        for (const auto& task : tasks) {
-            TLOG_DEBUG("  Task Name: ", task.name());
-            TLOG_DEBUG("    Node ID: ", task.node_id());
-            TLOG_DEBUG("    Priority: ", task.priority());
-            TLOG_DEBUG("    Policy: ", task.policy());
-            TLOG_DEBUG("    CPU Affinity: 0x", std::hex, task.cpu_affinity(),
-                       std::dec);
-            TLOG_DEBUG("    Period: ", task.period());
-            TLOG_DEBUG("    Release Time: ", task.release_time());
-            TLOG_DEBUG("    Runtime: ", task.runtime());
-            TLOG_DEBUG("    Deadline: ", task.deadline());
-            TLOG_DEBUG("    Max Deadline Misses: ", task.max_dmiss());
+        const std::string& node_id = entry.first;
+        const sched_info_t& schedule_info = entry.second;
+
+        TLOG_INFO("Node ID: ", node_id, " with ", schedule_info.num_tasks, " tasks");
+
+        for (int i = 0; i < schedule_info.num_tasks; i++) {
+            const sched_task_t& task = schedule_info.tasks[i];
+            TLOG_DEBUG("  Task Name: ", task.task_name);
+            TLOG_DEBUG("    CPU Affinity: ", task.cpu_affinity);
+            TLOG_DEBUG("    Priority: ", task.sched_priority);
+            TLOG_DEBUG("    Policy: ", task.sched_policy);
+            TLOG_DEBUG("    Period: ", task.period_ns / 1000000, "ms");
+            TLOG_DEBUG("    Runtime: ", task.runtime_ns / 1000000, "ms");
+            TLOG_DEBUG("    Deadline: ", task.deadline_ns / 1000000, "ms");
         }
     }
 }

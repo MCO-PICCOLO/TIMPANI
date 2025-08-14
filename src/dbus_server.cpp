@@ -114,8 +114,8 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
     if (sched_info_buf_) return true;
 
     // FIXME: Currently only serialize the first workload in schedule info
-    auto tasks = map.begin()->second;
-    if (tasks.empty()) {
+    auto sched_info = map.begin()->second;
+    if (sched_info.num_tasks == 0) {
         TLOG_WARN("No tasks in schedule info");
         return false;
     }
@@ -144,17 +144,18 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
     }
     serialize_int32_t(sched_info_buf_, tasks.size());  // nr_tasks
 #else // with Timpani-N v1.0
-    for (const auto& task : tasks) {
-        serialize_int32_t(sched_info_buf_, 0);  // unused dummy pid
+    for (int i = 0; i < sched_info.num_tasks; i++) {
+        const sched_task_t& task = sched_info.tasks[i];
+        std::string task_name = task.task_name;
         serialize_str(sched_info_buf_,
-                      task.name().substr(0, 16 - 1).c_str());
-        serialize_int32_t(sched_info_buf_, task.priority());
-        serialize_int32_t(sched_info_buf_, task.policy());
-        serialize_int32_t(sched_info_buf_, task.period());
-        serialize_int32_t(sched_info_buf_, task.release_time());
-        serialize_int32_t(sched_info_buf_, task.max_dmiss());
+                      task_name.substr(0, 16 - 1).c_str());
+        serialize_int32_t(sched_info_buf_, task.sched_priority);
+        serialize_int32_t(sched_info_buf_, task.sched_policy);
+        serialize_int32_t(sched_info_buf_, task.period_ns / 1000000);  // Convert to ms
+        serialize_int32_t(sched_info_buf_, task.release_time);  // release_time
+        serialize_int32_t(sched_info_buf_, task.max_dmiss);  // max_dmiss
         // FIXME: introduce string-type node_id on Timpani-N
-        serialize_int32_t(sched_info_buf_, std::stoi(task.node_id()));
+        serialize_int32_t(sched_info_buf_, task.cpu_affinity);  // Use CPU affinity as node ID for now
     }
 
     // Pack extra scheduling info into serial buffer
@@ -167,7 +168,7 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
     serialize_int64_t(sched_info_buf_, 0);             // cpumask
     serialize_int32_t(sched_info_buf_, 0);             // container_period
     serialize_int32_t(sched_info_buf_, 0);             // pod_period
-    serialize_int32_t(sched_info_buf_, tasks.size());  // nr_tasks
+    serialize_int32_t(sched_info_buf_, sched_info.num_tasks);  // nr_tasks
 #endif
 
     TLOG_DEBUG("Serialized sched_info_buf_: ", sched_info_buf_->pos, " bytes");
