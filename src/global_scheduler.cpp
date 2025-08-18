@@ -16,6 +16,7 @@ GlobalScheduler::GlobalScheduler(std::shared_ptr<NodeConfigManager> node_config_
         if (node_config_manager_->IsLoaded()) {
             TLOG_INFO("NodeConfigManager is loaded, initializing available CPUs");
             initialize_available_cpus();
+            initialize_cpu_utilization_tracking();
         } else {
             TLOG_WARN("NodeConfigManager is not loaded yet");
         }
@@ -64,24 +65,25 @@ bool GlobalScheduler::schedule(const std::string& algorithm)
     // Clear previous schedules
     cleanup_schedules();
 
-    // Reinitialize available CPUs (in case configuration changed)
+    // Reinitialize available CPUs and utilization tracking
     initialize_available_cpus();
+    initialize_cpu_utilization_tracking();
 
     TLOG_INFO("=== Starting GlobalScheduler with algorithm: ", algorithm, " ===");
     TLOG_INFO("Tasks to schedule: ", tasks_.size());
     TLOG_INFO("Available nodes: ", available_cpus_per_node_.size());
 
-    // Execute scheduling algorithm
-    if (algorithm == "least_loaded") {
+    // Execute scheduling algorithm based on new requirements
+    if (algorithm == "target_node_priority") {
+        schedule_with_target_node_priority();
+    } else if (algorithm == "least_loaded") {
         schedule_with_least_loaded();
     } else if (algorithm == "best_fit_decreasing") {
         schedule_with_best_fit_decreasing();
     } else {
         TLOG_ERROR("Unknown scheduling algorithm: ", algorithm);
         return false;
-    }
-
-    // Generate final schedules
+    }    // Generate final schedules
     generate_schedules();
 
     // Print results
@@ -393,12 +395,23 @@ void GlobalScheduler::print_scheduling_results()
 
 void GlobalScheduler::print_node_details(const std::string& node_id)
 {
-    double utilization = calculate_node_utilization(node_id);
-    TLOG_INFO("  Node Utilization: ", (utilization * 100.0), "%");
+    double node_utilization = calculate_node_utilization(node_id);
+    TLOG_INFO("  Node Utilization: ", (node_utilization * 100.0), "%");
 
-    if (utilization > 1.0) {
+    // Print CPU-level utilization details
+    if (cpu_utilization_per_node_.find(node_id) != cpu_utilization_per_node_.end()) {
+        for (const auto& cpu_pair : cpu_utilization_per_node_[node_id]) {
+            int cpu_id = cpu_pair.first;
+            double cpu_util = cpu_pair.second;
+            if (cpu_util > 0.0) {
+                TLOG_INFO("    CPU ", cpu_id, ": ", (cpu_util * 100.0), "% utilization");
+            }
+        }
+    }
+
+    if (node_utilization > 1.0) {
         TLOG_WARN("  ⚠ WARNING: Node is over-utilized!");
-    } else if (utilization > 0.8) {
+    } else if (node_utilization > 0.8) {
         TLOG_WARN("  ⚠ Node is highly utilized");
     } else {
         TLOG_INFO("  ✓ Node utilization is acceptable");
@@ -441,5 +454,201 @@ void GlobalScheduler::clear()
     cleanup_schedules();
     tasks_.clear();
     available_cpus_per_node_.clear();
+    cpu_utilization_per_node_.clear();
     TLOG_INFO("GlobalScheduler cleared");
+}
+
+void GlobalScheduler::schedule_with_target_node_priority()
+{
+    TLOG_INFO("Executing Target Node Priority scheduling algorithm");
+
+    int scheduled_count = 0;
+
+    for (auto& task : tasks_) {
+        // Rule 1: target_node must be assigned as assigned_node
+        if (task.target_node.empty()) {
+            TLOG_ERROR("Task '", task.name, "' has no target_node specified");
+            continue;
+        }
+
+        // Check if target node exists and has available CPUs
+        if (available_cpus_per_node_.find(task.target_node) == available_cpus_per_node_.end()) {
+            TLOG_ERROR("Target node '", task.target_node, "' not found in configuration");
+            continue;
+        }
+
+        if (available_cpus_per_node_[task.target_node].empty()) {
+            TLOG_WARN("Target node '", task.target_node, "' has no available CPUs for task '", task.name, "'");
+            continue;
+        }
+
+        // Rule 1: Assign target_node as assigned_node
+        task.assigned_node = task.target_node;
+
+        // Rules 2 & 3: Find best CPU within target node
+        int best_cpu = find_best_cpu_for_task(task, task.target_node);
+
+        if (best_cpu != -1) {
+            if (assign_task_to_node_cpu(task, task.target_node, best_cpu)) {
+                scheduled_count++;
+                TLOG_INFO("  ✓ Task '", task.name, "' → Node '", task.target_node,
+                          "' (CPU ", best_cpu, ", Affinity: ", task.affinity, ")");
+            } else {
+                TLOG_WARN("  ✗ Failed to assign task '", task.name, "' to CPU ", best_cpu);
+            }
+        } else {
+            TLOG_WARN("  ✗ No suitable CPU found for task '", task.name,
+                      "' on target node '", task.target_node, "'");
+        }
+    }
+
+    TLOG_INFO("Scheduled ", scheduled_count, "/", tasks_.size(), " tasks");
+}
+
+int GlobalScheduler::find_best_cpu_for_task(const Task& task, const std::string& node_id)
+{
+    auto& available_cpus = available_cpus_per_node_[node_id];
+    if (available_cpus.empty()) {
+        return -1;
+    }
+
+    double task_utilization = (task.period_us > 0) ?
+                              (double)task.runtime_us / task.period_us : 0.0;
+    const double CPU_UTILIZATION_THRESHOLD = 0.90;
+
+    // Rule 2: If task has specific CPU affinity, prioritize it
+    if (task.affinity != "any" && !task.affinity.empty()) {
+        try {
+            int required_cpu = std::stoi(task.affinity);
+
+            // Check if required CPU is available in target node
+            auto cpu_it = std::find(available_cpus.begin(), available_cpus.end(), required_cpu);
+            if (cpu_it != available_cpus.end()) {
+                // Check utilization threshold
+                double current_util = calculate_cpu_utilization(node_id, required_cpu);
+                if (current_util + task_utilization <= CPU_UTILIZATION_THRESHOLD) {
+                    TLOG_DEBUG("Using specific CPU affinity ", required_cpu, " for task ", task.name);
+                    return required_cpu;
+                } else {
+                    TLOG_WARN("Required CPU ", required_cpu, " would exceed utilization threshold");
+                }
+            } else {
+                TLOG_WARN("Required CPU ", required_cpu, " not available in node ", node_id);
+            }
+        } catch (const std::exception&) {
+            TLOG_WARN("Invalid CPU affinity format: ", task.affinity, ", treating as 'any'");
+        }
+    }
+
+    // Rule 3: For 'any' affinity, use Smart Packing Algorithm
+    // Strategy: Start from highest CPU number, pack until 80% utilization
+    std::vector<int> sorted_cpus = available_cpus;
+
+    // Sort by CPU number (highest first) for consistent packing strategy
+    std::sort(sorted_cpus.begin(), sorted_cpus.end(), std::greater<int>());
+
+    // Find first CPU that can accommodate the task without exceeding threshold
+    for (int cpu : sorted_cpus) {
+        double current_util = calculate_cpu_utilization(node_id, cpu);
+        if (current_util + task_utilization <= CPU_UTILIZATION_THRESHOLD) {
+            TLOG_DEBUG("Selected CPU ", cpu, " for task ", task.name,
+                      " (util: ", (current_util * 100), "% + ", (task_utilization * 100),
+                      "% = ", ((current_util + task_utilization) * 100), "%)");
+            return cpu;
+        }
+    }
+
+    TLOG_WARN("No CPU can accommodate task ", task.name, " (requires ",
+              (task_utilization * 100), "% utilization)");
+    return -1;
+}
+
+std::vector<int> GlobalScheduler::get_sorted_cpus_by_utilization(const std::string& node_id, bool prefer_high_utilization)
+{
+    auto& available_cpus = available_cpus_per_node_[node_id];
+    std::vector<int> sorted_cpus = available_cpus;
+
+    // Sort CPUs by utilization and CPU number
+    std::sort(sorted_cpus.begin(), sorted_cpus.end(),
+        [this, &node_id, prefer_high_utilization](int cpu_a, int cpu_b) {
+            double util_a = calculate_cpu_utilization(node_id, cpu_a);
+            double util_b = calculate_cpu_utilization(node_id, cpu_b);
+
+            // Primary criterion: utilization (prefer high utilization to pack tasks)
+            if (std::abs(util_a - util_b) > 0.01) { // 1% threshold
+                return prefer_high_utilization ? (util_a > util_b) : (util_a < util_b);
+            }
+
+            // Secondary criterion: prefer higher CPU numbers
+            return cpu_a > cpu_b;
+        });
+
+    return sorted_cpus;
+}
+
+bool GlobalScheduler::assign_task_to_node_cpu(Task& task, const std::string& node_id, int cpu_id)
+{
+    auto& available_cpus = available_cpus_per_node_[node_id];
+
+    // Check if CPU exists in available list
+    auto cpu_it = std::find(available_cpus.begin(), available_cpus.end(), cpu_id);
+    if (cpu_it == available_cpus.end()) {
+        TLOG_ERROR("CPU ", cpu_id, " not found in available CPUs for node ", node_id);
+        return false;
+    }
+
+    // Calculate new utilization if task is assigned
+    double task_utilization = (task.period_us > 0) ?
+                              (double)task.runtime_us / task.period_us : 0.0;
+    double current_cpu_util = calculate_cpu_utilization(node_id, cpu_id);
+    double new_cpu_util = current_cpu_util + task_utilization;
+
+    // Check utilization threshold (90% max)
+    const double CPU_UTILIZATION_THRESHOLD = 0.90;
+    if (new_cpu_util > CPU_UTILIZATION_THRESHOLD) {
+        TLOG_WARN("CPU ", cpu_id, " utilization would exceed threshold (",
+                  (new_cpu_util * 100), "% > ", (CPU_UTILIZATION_THRESHOLD * 100), "%)");
+        return false;
+    }
+
+    // Assign to task
+    task.assigned_cpu = cpu_id;
+
+    // Update CPU utilization (don't remove from available - allow multiple tasks per CPU)
+    cpu_utilization_per_node_[node_id][cpu_id] = new_cpu_util;
+
+    TLOG_DEBUG("Assigned task '", task.name, "' to CPU ", cpu_id,
+               " (utilization: ", (current_cpu_util * 100), "% → ", (new_cpu_util * 100), "%)");
+
+    return true;
+}
+
+double GlobalScheduler::calculate_cpu_utilization(const std::string& node_id, int cpu_id)
+{
+    if (cpu_utilization_per_node_.find(node_id) == cpu_utilization_per_node_.end()) {
+        return 0.0;
+    }
+
+    if (cpu_utilization_per_node_[node_id].find(cpu_id) == cpu_utilization_per_node_[node_id].end()) {
+        return 0.0;
+    }
+
+    return cpu_utilization_per_node_[node_id][cpu_id];
+}
+
+void GlobalScheduler::initialize_cpu_utilization_tracking()
+{
+    cpu_utilization_per_node_.clear();
+
+    for (const auto& pair : available_cpus_per_node_) {
+        const std::string& node_id = pair.first;
+        const std::vector<int>& cpus = pair.second;
+
+        for (int cpu : cpus) {
+            cpu_utilization_per_node_[node_id][cpu] = 0.0;
+        }
+    }
+
+    TLOG_DEBUG("Initialized CPU utilization tracking for ",
+               cpu_utilization_per_node_.size(), " nodes");
 }

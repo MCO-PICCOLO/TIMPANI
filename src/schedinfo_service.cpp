@@ -55,8 +55,8 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
     global_scheduler_->clear();
     global_scheduler_->set_tasks(tasks);
 
-    // Execute scheduling algorithm
-    bool scheduling_success = global_scheduler_->schedule("best_fit_decreasing");
+    // Execute scheduling algorithm with new target node priority logic
+    bool scheduling_success = global_scheduler_->schedule("target_node_priority");
 
     if (scheduling_success) {
         // Get scheduled results from GlobalScheduler

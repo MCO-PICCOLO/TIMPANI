@@ -66,29 +66,42 @@ private:
     // Available CPUs per node (updated from node configuration)
     std::map<std::string, std::vector<int>> available_cpus_per_node_;
 
+    // CPU utilization tracking per node and CPU
+    std::map<std::string, std::map<int, double>> cpu_utilization_per_node_;
+
     // Tasks to be scheduled
     std::vector<Task> tasks_;
 
     // Final schedule map (node_id -> sched_info_t)
     std::map<std::string, sched_info_t> sched_info_map_;
 
-    // Core scheduling algorithms
+    // New scheduling algorithm based on target node requirements
+    void schedule_with_target_node_priority();
+
+    // Core scheduling algorithms (legacy)
     void schedule_with_least_loaded();
     void schedule_with_best_fit_decreasing();
 
     // Schedule generation
     void generate_schedules();
 
-    // Algorithm helper functions
+    // New helper functions for target node scheduling
+    int find_best_cpu_for_task(const Task& task, const std::string& node_id);
+    std::vector<int> get_sorted_cpus_by_utilization(const std::string& node_id, bool prefer_high_utilization = true);
+    bool assign_task_to_node_cpu(Task& task, const std::string& node_id, int cpu_id);
+
+    // Algorithm helper functions (legacy)
     std::string find_best_node_least_loaded(const Task& task);
     std::string find_best_node_best_fit_decreasing(const Task& task);
 
     // Utility functions
     bool is_task_schedulable_on_node(const Task& task, const std::string& node_id);
     double calculate_node_utilization(const std::string& node_id, bool include_new_task = false, const Task* new_task = nullptr);
+    double calculate_cpu_utilization(const std::string& node_id, int cpu_id);
 
     // Internal helper functions
     void initialize_available_cpus();
+    void initialize_cpu_utilization_tracking();
     void cleanup_schedules();
     void print_scheduling_results();
     void print_node_details(const std::string& node_id);
