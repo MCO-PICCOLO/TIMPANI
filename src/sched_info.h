@@ -17,6 +17,7 @@ typedef struct {
     int sched_policy;            // Scheduling policy (SCHED_FIFO, SCHED_RR, etc.)
     int sched_priority;          // Scheduling priority
     int max_dmiss;               // Allowable max deadline misses
+    char assigned_node[64];      // Assigned node
 } sched_task_t;
 
 /**

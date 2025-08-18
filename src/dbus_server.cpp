@@ -1,6 +1,8 @@
 #include "tlog.h"
 #include "dbus_server.h"
 
+constexpr int kNsToMs = 1000000;
+
 DBusServer& DBusServer::GetInstance()
 {
     static DBusServer instance;
@@ -127,22 +129,25 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
         return false;
     }
 
-#if 0  // with Timpani-N v2.0
-    for (const auto& task : tasks) {
+#if 1  // with Timpani-N v2.0
+    for (int i = 0; i < sched_info.num_tasks; i++) {
+        const sched_task_t& task = sched_info.tasks[i];
+        std::string task_name = task.task_name;
         serialize_str(sched_info_buf_,
-                      task.name().substr(0, 16 - 1).c_str());
-        serialize_int32_t(sched_info_buf_, task.priority());
-        serialize_int32_t(sched_info_buf_, task.policy());
-        serialize_int32_t(sched_info_buf_, task.period());
-        serialize_int32_t(sched_info_buf_, task.release_time());
-        serialize_int32_t(sched_info_buf_, task.runtime());
-        serialize_int32_t(sched_info_buf_, task.deadline());
-        serialize_int64_t(sched_info_buf_, task.cpu_affinity());
-        serialize_int32_t(sched_info_buf_, task.max_dmiss());
+                      task_name.substr(0, 16 - 1).c_str());
+        serialize_int32_t(sched_info_buf_, task.sched_priority);
+        serialize_int32_t(sched_info_buf_, task.sched_policy);
+        serialize_int32_t(sched_info_buf_, task.period_ns / kNsToMs);
+        serialize_int32_t(sched_info_buf_, task.runtime_ns / kNsToMs);
+        serialize_int32_t(sched_info_buf_, task.deadline_ns / kNsToMs);
+        serialize_int32_t(sched_info_buf_, task.release_time);
+        serialize_int64_t(sched_info_buf_, task.cpu_affinity);
+        serialize_int32_t(sched_info_buf_, task.max_dmiss);
+        std::string task_assigned_node = task.assigned_node;
         serialize_str(sched_info_buf_,
-                      task.node_id().substr(0, 64 - 1).c_str());
+                      task_assigned_node.substr(0, 64 - 1).c_str());
     }
-    serialize_int32_t(sched_info_buf_, tasks.size());  // nr_tasks
+    serialize_int32_t(sched_info_buf_, sched_info.num_tasks);  // nr_tasks
 #else // with Timpani-N v1.0
     for (int i = 0; i < sched_info.num_tasks; i++) {
         const sched_task_t& task = sched_info.tasks[i];
@@ -151,7 +156,7 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
                       task_name.substr(0, 16 - 1).c_str());
         serialize_int32_t(sched_info_buf_, task.sched_priority);
         serialize_int32_t(sched_info_buf_, task.sched_policy);
-        serialize_int32_t(sched_info_buf_, task.period_ns / 1000000);  // Convert to ms
+        serialize_int32_t(sched_info_buf_, task.period_ns / kNsToMs);  // Convert to ms
         serialize_int32_t(sched_info_buf_, task.release_time);  // release_time
         serialize_int32_t(sched_info_buf_, task.max_dmiss);  // max_dmiss
         // FIXME: introduce string-type node_id on Timpani-N

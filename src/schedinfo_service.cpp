@@ -205,6 +205,7 @@ void SchedInfoServer::DumpSchedInfo()
         for (int i = 0; i < schedule_info.num_tasks; i++) {
             const sched_task_t& task = schedule_info.tasks[i];
             TLOG_DEBUG("  Task Name: ", task.task_name);
+            TLOG_DEBUG("    Assigned Node: ", task.assigned_node);
             TLOG_DEBUG("    CPU Affinity: ", task.cpu_affinity);
             TLOG_DEBUG("    Priority: ", task.sched_priority);
             TLOG_DEBUG("    Policy: ", task.sched_policy);

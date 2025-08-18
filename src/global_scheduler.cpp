@@ -280,6 +280,10 @@ void GlobalScheduler::generate_schedules()
                 sched_task.sched_policy = SCHED_FIFO;              // Default to FIFO
                 sched_task.sched_priority = task.priority;
 
+                strncpy(sched_task.assigned_node, task.assigned_node.c_str(),
+                        sizeof(sched_task.assigned_node) - 1);
+                sched_task.assigned_node[sizeof(sched_task.assigned_node) - 1] = '\0';
+
                 task_index++;
             }
         }
