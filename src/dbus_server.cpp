@@ -1,7 +1,7 @@
 #include "tlog.h"
 #include "dbus_server.h"
 
-constexpr int kNsToMs = 1000000;
+constexpr int kNsToUs = 1000;
 
 DBusServer& DBusServer::GetInstance()
 {
@@ -137,10 +137,10 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
                       task_name.substr(0, 16 - 1).c_str());
         serialize_int32_t(sched_info_buf_, task.sched_priority);
         serialize_int32_t(sched_info_buf_, task.sched_policy);
-        serialize_int32_t(sched_info_buf_, task.period_ns / kNsToMs);
-        serialize_int32_t(sched_info_buf_, task.runtime_ns / kNsToMs);
-        serialize_int32_t(sched_info_buf_, task.deadline_ns / kNsToMs);
-        serialize_int32_t(sched_info_buf_, task.release_time);
+        serialize_int32_t(sched_info_buf_, task.period_ns / kNsToUs);
+        serialize_int32_t(sched_info_buf_, task.runtime_ns / kNsToUs);
+        serialize_int32_t(sched_info_buf_, task.deadline_ns / kNsToUs);
+        serialize_int32_t(sched_info_buf_, task.release_time / kNsToUs);
         serialize_int64_t(sched_info_buf_, task.cpu_affinity);
         serialize_int32_t(sched_info_buf_, task.max_dmiss);
         std::string task_assigned_node = task.assigned_node;
@@ -156,8 +156,8 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
                       task_name.substr(0, 16 - 1).c_str());
         serialize_int32_t(sched_info_buf_, task.sched_priority);
         serialize_int32_t(sched_info_buf_, task.sched_policy);
-        serialize_int32_t(sched_info_buf_, task.period_ns / kNsToMs);  // Convert to ms
-        serialize_int32_t(sched_info_buf_, task.release_time);  // release_time
+        serialize_int32_t(sched_info_buf_, task.period_ns / kNsToUs);  // Convert to ms
+        serialize_int32_t(sched_info_buf_, task.release_time / kNsToUs);  // release_time
         serialize_int32_t(sched_info_buf_, task.max_dmiss);  // max_dmiss
         // FIXME: introduce string-type node_id on Timpani-N
         serialize_int32_t(sched_info_buf_, task.cpu_affinity);  // Use CPU affinity as node ID for now
