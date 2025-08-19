@@ -60,6 +60,8 @@ class DBusServer
     SchedInfoServer* sched_info_server_;
     // Buffer to store serialized scheduling info for libtrpc callbacks
     serial_buf_t* sched_info_buf_;
+    // Mutex to protect sched_info_buf_ access
+    std::mutex sched_info_buf_mutex_;
 };
 
 #endif  // DBUS_SERVER_H

@@ -75,9 +75,12 @@ void DBusServer::Stop()
         }
     }
 
-    if (sched_info_buf_) {
-        free_serial_buf(sched_info_buf_);
-        sched_info_buf_ = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(sched_info_buf_mutex_);
+        if (sched_info_buf_) {
+            free_serial_buf(sched_info_buf_);
+            sched_info_buf_ = nullptr;
+        }
     }
 
     SetSchedInfoServer(nullptr);
@@ -112,6 +115,8 @@ void DBusServer::EventLoop()
 
 bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
 {
+    std::lock_guard<std::mutex> lock(sched_info_buf_mutex_);
+
     // Return true if buffer is already allocated
     if (sched_info_buf_) return true;
 
@@ -197,9 +202,12 @@ void DBusServer::SchedInfoCallback(const char* name, void** buf,
         auto sched_info_map = instance.sched_info_server_->GetSchedInfoMap();
         if (!sched_info_map.empty() &&
             instance.SerializeSchedInfo(sched_info_map)) {
-            *buf = instance.sched_info_buf_->data;
-            *bufsize = instance.sched_info_buf_->pos;
-            return;
+            std::lock_guard<std::mutex> lock(instance.sched_info_buf_mutex_);
+            if (instance.sched_info_buf_) {
+                *buf = instance.sched_info_buf_->data;
+                *bufsize = instance.sched_info_buf_->pos;
+                return;
+            }
         }
     }
 
