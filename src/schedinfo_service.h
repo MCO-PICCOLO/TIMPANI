@@ -21,7 +21,8 @@ using schedinfo::v1::SchedInfoService;
 using schedinfo::v1::SchedPolicy;
 using schedinfo::v1::TaskInfo;
 
-using SchedInfoMap = std::map<std::string, sched_info_t>;
+using NodeSchedInfoMap = std::map<std::string, sched_info_t>;
+using SchedInfoMap = std::map<std::string, NodeSchedInfoMap>;
 
 /**
 * @brief Implementation of the SchedInfoService gRPC service

@@ -121,11 +121,7 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
     if (sched_info_buf_) return true;
 
     // FIXME: Currently only serialize the first workload in schedule info
-    auto sched_info = map.begin()->second;
-    if (sched_info.num_tasks == 0) {
-        TLOG_WARN("No tasks in schedule info");
-        return false;
-    }
+    const auto& node_sched_info = map.begin()->second;
 
     // Allocate serial buffer and pack schedule info into it
     sched_info_buf_ = new_serial_buf(1024);
@@ -134,52 +130,33 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
         return false;
     }
 
-#if 1  // with Timpani-N v2.0
-    for (int i = 0; i < sched_info.num_tasks; i++) {
-        const sched_task_t& task = sched_info.tasks[i];
-        std::string task_name = task.task_name;
-        serialize_str(sched_info_buf_,
-                      task_name.substr(0, 16 - 1).c_str());
-        serialize_int32_t(sched_info_buf_, task.sched_priority);
-        serialize_int32_t(sched_info_buf_, task.sched_policy);
-        serialize_int32_t(sched_info_buf_, task.period_ns / kNsToUs);
-        serialize_int32_t(sched_info_buf_, task.runtime_ns / kNsToUs);
-        serialize_int32_t(sched_info_buf_, task.deadline_ns / kNsToUs);
-        serialize_int32_t(sched_info_buf_, task.release_time / kNsToUs);
-        serialize_int64_t(sched_info_buf_, task.cpu_affinity);
-        serialize_int32_t(sched_info_buf_, task.max_dmiss);
-        std::string task_assigned_node = task.assigned_node;
-        serialize_str(sched_info_buf_,
-                      task_assigned_node.substr(0, 64 - 1).c_str());
-    }
-    serialize_int32_t(sched_info_buf_, sched_info.num_tasks);  // nr_tasks
-#else // with Timpani-N v1.0
-    for (int i = 0; i < sched_info.num_tasks; i++) {
-        const sched_task_t& task = sched_info.tasks[i];
-        std::string task_name = task.task_name;
-        serialize_str(sched_info_buf_,
-                      task_name.substr(0, 16 - 1).c_str());
-        serialize_int32_t(sched_info_buf_, task.sched_priority);
-        serialize_int32_t(sched_info_buf_, task.sched_policy);
-        serialize_int32_t(sched_info_buf_, task.period_ns / kNsToUs);  // Convert to ms
-        serialize_int32_t(sched_info_buf_, task.release_time / kNsToUs);  // release_time
-        serialize_int32_t(sched_info_buf_, task.max_dmiss);  // max_dmiss
-        // FIXME: introduce string-type node_id on Timpani-N
-        serialize_int32_t(sched_info_buf_, task.cpu_affinity);  // Use CPU affinity as node ID for now
-    }
+    int nr_tasks = 0;
+    for (const auto& sinfo : node_sched_info) {
+        // Serialize each node's schedule info
+        const std::string& node_id = sinfo.first;
+        const sched_info_t& sched_info = sinfo.second;
 
-    // Pack extra scheduling info into serial buffer
-    // FIXME: remove unused items
-    char container_id[64];
-    memset(container_id, '0', sizeof(container_id));
-    serialize_blob(sched_info_buf_, container_id, sizeof(container_id));
-    serialize_int32_t(sched_info_buf_, 0);             // container_rt_runtime
-    serialize_int32_t(sched_info_buf_, 0);             // container_rt_period
-    serialize_int64_t(sched_info_buf_, 0);             // cpumask
-    serialize_int32_t(sched_info_buf_, 0);             // container_period
-    serialize_int32_t(sched_info_buf_, 0);             // pod_period
-    serialize_int32_t(sched_info_buf_, sched_info.num_tasks);  // nr_tasks
-#endif
+        // NOTE: This buffer format only works with Timpani-N v2.0
+        for (int i = 0; i < sched_info.num_tasks; i++) {
+            const sched_task_t& task = sched_info.tasks[i];
+            std::string task_name = task.task_name;
+            serialize_str(sched_info_buf_,
+                          task_name.substr(0, 16 - 1).c_str());
+            serialize_int32_t(sched_info_buf_, task.sched_priority);
+            serialize_int32_t(sched_info_buf_, task.sched_policy);
+            serialize_int32_t(sched_info_buf_, task.period_ns / kNsToUs);
+            serialize_int32_t(sched_info_buf_, task.runtime_ns / kNsToUs);
+            serialize_int32_t(sched_info_buf_, task.deadline_ns / kNsToUs);
+            serialize_int32_t(sched_info_buf_, task.release_time / kNsToUs);
+            serialize_int64_t(sched_info_buf_, task.cpu_affinity);
+            serialize_int32_t(sched_info_buf_, task.max_dmiss);
+            std::string task_assigned_node = task.assigned_node;
+            serialize_str(sched_info_buf_,
+                        task_assigned_node.substr(0, 64 - 1).c_str());
+        }
+        nr_tasks += sched_info.num_tasks;
+    }
+    serialize_int32_t(sched_info_buf_, nr_tasks);
 
     TLOG_DEBUG("Serialized sched_info_buf_: ", sched_info_buf_->pos, " bytes");
 

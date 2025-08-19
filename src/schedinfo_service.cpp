@@ -41,9 +41,9 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
 
     std::unique_lock<std::shared_mutex> lock(sched_info_mutex_);
 
-    // Check if workload_id already exists
-    if (sched_info_map_.find(request->workload_id()) != sched_info_map_.end()) {
-        TLOG_ERROR("Workload ID ", request->workload_id(), " already exists");
+    // TODO: Support for multi-workloads aka. multiple AddSchedInfo gRPC calls)
+    if (!sched_info_map_.empty()) {
+        TLOG_ERROR("FIXME: Only 1 workload is supported.");
         reply->set_status(-1);  // Indicate failure
         return Status::OK;
     }
@@ -57,25 +57,21 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
 
     // Execute scheduling algorithm with new target node priority logic
     bool scheduling_success = global_scheduler_->schedule("target_node_priority");
-
-    if (scheduling_success) {
-        // Get scheduled results from GlobalScheduler
-        const auto& scheduled_map = global_scheduler_->get_sched_info_map();
-
-        // Store in our sched_info_map_ (copy the results)
-        for (const auto& pair : scheduled_map) {
-            sched_info_map_[pair.first] = pair.second;
-        }
-
-        TLOG_INFO("Successfully scheduled ", global_scheduler_->get_total_scheduled_tasks(),
-                  " tasks across ", scheduled_map.size(), " nodes");
-        reply->set_status(0);  // Success
-    } else {
+    if (!scheduling_success) {
         TLOG_ERROR("Scheduling failed for workload: ", request->workload_id());
         reply->set_status(-1);  // Indicate failure
+        return Status::OK;
     }
 
-    lock.unlock();
+    // Get scheduled results from GlobalScheduler
+    const auto& node_sched_map = global_scheduler_->get_sched_info_map();
+
+    // Store in our sched_info_map_ (copy the results)
+    sched_info_map_[request->workload_id()] = node_sched_map;
+
+    TLOG_INFO("Successfully scheduled ", global_scheduler_->get_total_scheduled_tasks(),
+            " tasks across ", node_sched_map.size(), " nodes");
+    reply->set_status(0);  // Success
     return Status::OK;
 }
 
@@ -197,21 +193,28 @@ void SchedInfoServer::DumpSchedInfo()
 
     TLOG_INFO("Dumping SchedInfoMap:");
     for (const auto& entry : sched_info_map) {
-        const std::string& node_id = entry.first;
-        const sched_info_t& schedule_info = entry.second;
+        const std::string& workload_id = entry.first;
+        const auto& node_sched_info = entry.second;
 
-        TLOG_INFO("Node ID: ", node_id, " with ", schedule_info.num_tasks, " tasks");
+        TLOG_INFO("Workload ID: ", workload_id, " with ", node_sched_info.size(), " nodes");
 
-        for (int i = 0; i < schedule_info.num_tasks; i++) {
-            const sched_task_t& task = schedule_info.tasks[i];
-            TLOG_DEBUG("  Task Name: ", task.task_name);
-            TLOG_DEBUG("    Assigned Node: ", task.assigned_node);
-            TLOG_DEBUG("    CPU Affinity: ", task.cpu_affinity);
-            TLOG_DEBUG("    Priority: ", task.sched_priority);
-            TLOG_DEBUG("    Policy: ", task.sched_policy);
-            TLOG_DEBUG("    Period: ", task.period_ns / 1000000, "ms");
-            TLOG_DEBUG("    Runtime: ", task.runtime_ns / 1000000, "ms");
-            TLOG_DEBUG("    Deadline: ", task.deadline_ns / 1000000, "ms");
+        for (const auto& node : node_sched_info) {
+            const std::string& node_id = node.first;
+            const sched_info_t& schedule_info = node.second;
+
+            TLOG_INFO("Node ID: ", node_id, " with ", schedule_info.num_tasks, " tasks");
+
+            for (int i = 0; i < schedule_info.num_tasks; i++) {
+                const sched_task_t& task = schedule_info.tasks[i];
+                TLOG_DEBUG("  Task Name: ", task.task_name);
+                TLOG_DEBUG("    Assigned Node: ", task.assigned_node);
+                TLOG_DEBUG("    CPU Affinity: ", task.cpu_affinity);
+                TLOG_DEBUG("    Priority: ", task.sched_priority);
+                TLOG_DEBUG("    Policy: ", task.sched_policy);
+                TLOG_DEBUG("    Period: ", task.period_ns / 1000000, "ms");
+                TLOG_DEBUG("    Runtime: ", task.runtime_ns / 1000000, "ms");
+                TLOG_DEBUG("    Deadline: ", task.deadline_ns / 1000000, "ms");
+            }
         }
     }
 }
