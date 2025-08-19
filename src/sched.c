@@ -13,13 +13,13 @@
 
 #define PROCESS_NAME_SIZE	16
 
-void set_affinity(int cpu) {
+void set_affinity(pid_t pid, int cpu) {
 	cpu_set_t cpuset;
 	CPU_ZERO(&cpuset);
 	CPU_SET(cpu, &cpuset);
 
-	// Set the current thread's (the main thread) CPU affinity mask
-	if (sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) == -1) {
+	// Set pid's CPU affinity mask
+	if (sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset) == -1) {
 		perror("Error: sched_setaffinity");
 	}
 }

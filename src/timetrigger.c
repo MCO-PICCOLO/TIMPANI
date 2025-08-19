@@ -509,6 +509,8 @@ static void init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
 			free(tt_node);
 			continue;
 		}
+
+		set_affinity(pid, tt_node->task.cpu_affinity);
 		priority = tt_node->task.sched_priority;
 		policy = tt_node->task.sched_policy;
 
@@ -571,6 +573,7 @@ static int start_tt_timer(struct listhead *lh_ptr)
 int main(int argc, char *argv[])
 {
 	struct listhead lh;
+	pid_t pid = getpid();
 
 	timer_t tracetimer;
 
@@ -581,10 +584,10 @@ int main(int argc, char *argv[])
 	}
 
 	if (cpu != -1) {
-		set_affinity(cpu);
+		set_affinity(pid, cpu);
 	}
 	if (prio > 0 && prio <= 99) {
-		set_schedattr(getpid(), prio, SCHED_FIFO);
+		set_schedattr(pid, prio, SCHED_FIFO);
 	}
 
 	// Calibrate BPF ktime(CLOCK_MONOTONIC) offset to CLOCK_REALTIME
