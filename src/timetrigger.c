@@ -312,7 +312,7 @@ static int init_trpc(const char *addr, int port, sd_bus **dbus_ret, sd_event **e
 		return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
@@ -422,6 +422,24 @@ static int sync_timer(sd_bus *dbus, char *node_id, struct timespec *ts_ptr)
 	}
 
 	return 0;
+}
+
+static void init_trpc_schedinfo(const char *addr, int port,
+				sd_bus **dbus_ret, sd_event **event_ret,
+				char *node_id)
+{
+	// Initialze trpc channel and get schedule info with retry logic
+	while (1) {
+		if (init_trpc(addr, port, dbus_ret, event_ret) == 0) {
+			if (get_schedinfo(*dbus_ret, node_id) == 0) {
+				/* Successfully retrieved schedule info */
+				return;
+			}
+		}
+
+		/* failed to get schedule info, retrying */
+		usleep(100000);
+	}
 }
 
 static void remove_tt_node(struct time_trigger *tt_node) {
@@ -593,15 +611,8 @@ int main(int argc, char *argv[])
 	// Calibrate BPF ktime(CLOCK_MONOTONIC) offset to CLOCK_REALTIME
 	calibrate_bpf_ktime_offset();
 
-	// Initialze TRPC channel
-	if (init_trpc(addr, port, &trpc_dbus, &trpc_event) < 0) {
-		return EXIT_FAILURE;
-	}
-
-	// Get Schedule Info
-	if (get_schedinfo(trpc_dbus, node_id) < 0) {
-		return EXIT_FAILURE;
-	}
+	// Initialze trpc channel and get schedule info
+	init_trpc_schedinfo(addr, port, &trpc_dbus, &trpc_event, node_id);
 
 	// Activate BPF programs
 	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
