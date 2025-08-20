@@ -1,5 +1,6 @@
 #include "tlog.h"
 #include "dbus_server.h"
+#include "fault_client.h"
 
 constexpr int kNsToUs = 1000;
 
@@ -198,6 +199,27 @@ void DBusServer::SchedInfoCallback(const char* name, void** buf,
 void DBusServer::DMissCallback(const char* name, const char* task)
 {
     TLOG_INFO("DMissCallback with name: ", name, ", task: ", task);
+
+    std::string workload_id;
+
+    DBusServer& instance = GetInstance();
+    if (instance.sched_info_server_) {
+        auto map = instance.sched_info_server_->GetSchedInfoMap();
+        if (map.empty()) {
+            TLOG_WARN("No schedule info available for DMissCallback");
+            workload_id.clear();
+        } else {
+            // FIXME: Currently only references the first workload
+            workload_id = map.begin()->first;
+        }
+    }
+
+    FaultServiceClient& client = FaultServiceClient::GetInstance();
+
+    if (!client.NotifyFault(workload_id, name, task, FaultType::DMISS)) {
+        TLOG_WARN("NotifyFault failed for ", workload_id,
+                  " on node ", name, " for task ", task);
+    }
 }
 
 void DBusServer::SyncCallback(const char* name, int* ack, struct timespec* ts)
