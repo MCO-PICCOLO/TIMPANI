@@ -62,6 +62,8 @@ class DBusServer
     serial_buf_t* sched_info_buf_;
     // Mutex to protect sched_info_buf_ access
     std::mutex sched_info_buf_mutex_;
+    // Map to track synchronization status of each node for SyncCallback
+    std::unordered_map<std::string, bool> node_sync_map_;
 };
 
 #endif  // DBUS_SERVER_H

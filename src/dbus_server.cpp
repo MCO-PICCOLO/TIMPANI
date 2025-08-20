@@ -203,7 +203,59 @@ void DBusServer::DMissCallback(const char* name, const char* task)
 void DBusServer::SyncCallback(const char* name, int* ack, struct timespec* ts)
 {
     TLOG_INFO("SyncCallback with name: ", name);
-    if (ack) {
-        *ack = 0;  // Acknowledge the sync
+
+    DBusServer& instance = GetInstance();
+
+    // If node sync map is empty, initialize it based on schedule info
+    // FIXME: This should be done per workload
+    if (instance.node_sync_map_.empty()) {
+        if (instance.sched_info_server_) {
+            auto map = instance.sched_info_server_->GetSchedInfoMap();
+            // FIXME: Currently only initializes the first workload
+            const auto& node_sched_info = map.begin()->second;
+            for (const auto& sinfo : node_sched_info) {
+                const std::string& node_id = sinfo.first;
+                instance.node_sync_map_[node_id] = false;
+            }
+            TLOG_DEBUG("Created node sync map with ",
+                       instance.node_sync_map_.size(), " entries",
+                       " for ", map.begin()->first);
+        }
+    }
+
+    // Update sync status for the node
+    auto it = instance.node_sync_map_.find(name);
+    if (it == instance.node_sync_map_.end()) {
+        TLOG_WARN("Not found in node sync map: ", name);
+        if (ack) {
+            *ack = 0;
+        }
+        return;
+    }
+    it->second = true;  // Mark the node as ready
+
+    // Check if all nodes are ready
+    bool all_ready = true;
+    for (const auto& [node, ready] : instance.node_sync_map_) {
+        if (!ready) {
+            all_ready = false;
+            break;
+        }
+    }
+
+    if (all_ready) {
+        TLOG_DEBUG("SyncCallback acked: ", name);
+        if (ack) {
+            *ack = 1;  // Acknowledge synchronization
+        }
+        if (ts) {
+            // Set the sync timestamp to current time + 1 second
+            clock_gettime(CLOCK_REALTIME, ts);
+            ts->tv_sec += 1;
+        }
+    } else {
+        if (ack) {
+            *ack = 0;  // Not all nodes are ready
+        }
     }
 }
