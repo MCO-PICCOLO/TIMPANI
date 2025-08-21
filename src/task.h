@@ -12,7 +12,7 @@ struct Task {
     std::string name;
     std::string target_node;         // Target node ID (can be empty for auto-assignment)
     int priority;
-    std::string policy;              // Scheduling policy as string ("SCHED_FIFO", "SCHED_RR", etc.)
+    int policy;              // Scheduling policy as integer (0: SCHED_NORMAL, 1: SCHED_FIFO, 2: SCHED_RR)
 
     // Timing parameters
     uint64_t period_us;              // Period in microseconds

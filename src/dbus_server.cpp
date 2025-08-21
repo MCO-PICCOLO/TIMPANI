@@ -147,7 +147,7 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
             serialize_int32_t(sched_info_buf_, task.sched_priority);
             serialize_int32_t(sched_info_buf_, task.sched_policy);
             serialize_int32_t(sched_info_buf_, task.period_ns / kNsToUs);
-            serialize_int32_t(sched_info_buf_, task.release_time / kNsToUs);
+            serialize_int32_t(sched_info_buf_, task.release_time);
             serialize_int32_t(sched_info_buf_, task.runtime_ns / kNsToUs);
             serialize_int32_t(sched_info_buf_, task.deadline_ns / kNsToUs);
             serialize_int64_t(sched_info_buf_, task.cpu_affinity);

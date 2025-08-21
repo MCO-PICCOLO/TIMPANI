@@ -28,13 +28,13 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
         const auto& task = request->tasks(i);
         TLOG_DEBUG("Task ", i, ": ", task.name());
         TLOG_DEBUG("  Priority: ", task.priority());
-        TLOG_DEBUG("  Policy: ", SchedPolicyToStr(task.policy()));
+        TLOG_DEBUG("  Policy: ", task.policy());
         TLOG_DEBUG("  CPU Affinity: 0x", std::hex, task.cpu_affinity(),
                    std::dec);
         TLOG_DEBUG("  Period: ", task.period());
-        TLOG_DEBUG("  Release Time: ", task.release_time());
         TLOG_DEBUG("  Runtime: ", task.runtime());
         TLOG_DEBUG("  Deadline: ", task.deadline());
+        TLOG_DEBUG("  Release Time: ", task.release_time());
         TLOG_DEBUG("  Max Deadline Misses: ", task.max_dmiss());
         TLOG_DEBUG("  Node ID: ", task.node_id());
     }
@@ -85,10 +85,14 @@ std::vector<Task> SchedInfoServiceImpl::ConvertTaskInfoToTasks(const SchedInfo* 
 
         Task task;
         task.name = grpc_task.name();
+        task.policy = SchedPolicyToInt(static_cast<SchedPolicy>(grpc_task.policy()));
         task.priority = grpc_task.priority();
+        task.cpu_affinity = grpc_task.cpu_affinity();
         task.period_us = grpc_task.period();
         task.runtime_us = grpc_task.runtime();
         task.deadline_us = grpc_task.deadline();
+        task.release_time = grpc_task.release_time();
+        task.max_dmiss = grpc_task.max_dmiss();
         task.target_node = grpc_task.node_id();
 
         // Convert CPU affinity from hex to string
@@ -122,17 +126,17 @@ SchedInfoMap SchedInfoServiceImpl::GetSchedInfoMap() const
     return sched_info_map_;
 }
 
-const char* SchedInfoServiceImpl::SchedPolicyToStr(SchedPolicy policy)
+int SchedInfoServiceImpl::SchedPolicyToInt(SchedPolicy policy)
 {
     switch (policy) {
         case SchedPolicy::NORMAL:
-            return "NORMAL";
+            return 0;
         case SchedPolicy::FIFO:
-            return "FIFO";
+            return 1;
         case SchedPolicy::RR:
-            return "RR";
+            return 2;
         default:
-            return "UNKNOWN";
+            return -1;
     }
 }
 

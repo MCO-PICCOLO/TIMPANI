@@ -279,8 +279,10 @@ void GlobalScheduler::generate_schedules()
                 sched_task.runtime_ns = task.runtime_us * 1000;    // Convert to nanoseconds
                 sched_task.deadline_ns = task.deadline_us * 1000;  // Convert to nanoseconds
                 sched_task.cpu_affinity = task.assigned_cpu;
-                sched_task.sched_policy = SCHED_FIFO;              // Default to FIFO
+                sched_task.sched_policy = task.policy;             // Default to FIFO
                 sched_task.sched_priority = task.priority;
+                sched_task.release_time = task.release_time; // Release time in microseconds
+                sched_task.max_dmiss = task.max_dmiss;
 
                 strncpy(sched_task.assigned_node, task.assigned_node.c_str(),
                         sizeof(sched_task.assigned_node) - 1);

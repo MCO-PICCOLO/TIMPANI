@@ -41,7 +41,7 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
     SchedInfoMap GetSchedInfoMap() const;
 
   private:
-    static const char* SchedPolicyToStr(SchedPolicy policy);
+    static int SchedPolicyToInt(SchedPolicy policy);
 
     // Convert gRPC TaskInfo to internal Task structure
     std::vector<Task> ConvertTaskInfoToTasks(const SchedInfo* request);
