@@ -140,15 +140,16 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
         // NOTE: This buffer format only works with Timpani-N v2.0
         for (int i = 0; i < sched_info.num_tasks; i++) {
             const sched_task_t& task = sched_info.tasks[i];
+            // Ensure reverse order from deserialization in Timpani-N
             std::string task_name = task.task_name;
             serialize_str(sched_info_buf_,
                           task_name.substr(0, 16 - 1).c_str());
             serialize_int32_t(sched_info_buf_, task.sched_priority);
             serialize_int32_t(sched_info_buf_, task.sched_policy);
             serialize_int32_t(sched_info_buf_, task.period_ns / kNsToUs);
+            serialize_int32_t(sched_info_buf_, task.release_time / kNsToUs);
             serialize_int32_t(sched_info_buf_, task.runtime_ns / kNsToUs);
             serialize_int32_t(sched_info_buf_, task.deadline_ns / kNsToUs);
-            serialize_int32_t(sched_info_buf_, task.release_time / kNsToUs);
             serialize_int64_t(sched_info_buf_, task.cpu_affinity);
             serialize_int32_t(sched_info_buf_, task.max_dmiss);
             std::string task_assigned_node = task.assigned_node;
