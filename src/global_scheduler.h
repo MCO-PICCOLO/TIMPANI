@@ -75,6 +75,9 @@ private:
     // Final schedule map (node_id -> sched_info_t)
     std::map<std::string, sched_info_t> sched_info_map_;
 
+    // CPU_UTILIZATION_THRESHOLD
+    static constexpr double CPU_UTILIZATION_THRESHOLD = 0.90;
+
     // New scheduling algorithm based on target node requirements
     void schedule_with_target_node_priority();
 

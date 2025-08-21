@@ -413,7 +413,7 @@ void GlobalScheduler::print_node_details(const std::string& node_id)
 
     if (node_utilization > 1.0) {
         TLOG_WARN("  ⚠ WARNING: Node is over-utilized!");
-    } else if (node_utilization > 0.8) {
+    } else if (node_utilization > CPU_UTILIZATION_THRESHOLD * available_cpus_per_node_[node_id].size()) {
         TLOG_WARN("  ⚠ Node is highly utilized");
     } else {
         TLOG_INFO("  ✓ Node utilization is acceptable");
@@ -516,7 +516,6 @@ int GlobalScheduler::find_best_cpu_for_task(const Task& task, const std::string&
 
     double task_utilization = (task.period_us > 0) ?
                               (double)task.runtime_us / task.period_us : 0.0;
-    const double CPU_UTILIZATION_THRESHOLD = 0.90;
 
     // Rule 2: If task has specific CPU affinity, prioritize it
     if (task.affinity != "any" && !task.affinity.empty()) {
@@ -606,7 +605,6 @@ bool GlobalScheduler::assign_task_to_node_cpu(Task& task, const std::string& nod
     double new_cpu_util = current_cpu_util + task_utilization;
 
     // Check utilization threshold (90% max)
-    const double CPU_UTILIZATION_THRESHOLD = 0.90;
     if (new_cpu_util > CPU_UTILIZATION_THRESHOLD) {
         TLOG_WARN("CPU ", cpu_id, " utilization would exceed threshold (",
                   (new_cpu_util * 100), "% > ", (CPU_UTILIZATION_THRESHOLD * 100), "%)");
