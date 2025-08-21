@@ -53,7 +53,7 @@ bool GetOptions(int argc, char *argv[], int& sinfo_port,
                 std::string& fault_addr, int& fault_port,
                 int& dbus_port, bool& notify_fault, std::string& node_config_file)
 {
-    const char* short_opts = "hs:a:p:d:nc:";
+    const char* short_opts = "hs:f:p:d:nc:";
     const struct option long_opts[] = {
         {"help", no_argument, nullptr, 'h'},
         {"sinfoport", required_argument, nullptr, 's'},
