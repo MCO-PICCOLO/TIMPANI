@@ -411,12 +411,18 @@ void GlobalScheduler::print_node_details(const std::string& node_id)
         }
     }
 
-    if (node_utilization > 1.0) {
-        TLOG_WARN("  ⚠ WARNING: Node is over-utilized!");
-    } else if (node_utilization > CPU_UTILIZATION_THRESHOLD * available_cpus_per_node_[node_id].size()) {
-        TLOG_WARN("  ⚠ Node is highly utilized");
+    auto it = available_cpus_per_node_.find(node_id);
+    if (it != available_cpus_per_node_.end()) {
+        size_t cpu_count = it->second.size();
+        if (node_utilization > 1.0 * cpu_count) {
+            TLOG_WARN("  ⚠ WARNING: Node is over-utilized!");
+        } else if (node_utilization > CPU_UTILIZATION_THRESHOLD * cpu_count) {
+            TLOG_WARN("  ⚠ Node is highly utilized");
+        } else {
+            TLOG_INFO("  ✓ Node utilization is acceptable");
+        }
     } else {
-        TLOG_INFO("  ✓ Node utilization is acceptable");
+        TLOG_WARN("  ⚠ Node ID '", node_id, "' not found in available_cpus_per_node_");
     }
 }
 
