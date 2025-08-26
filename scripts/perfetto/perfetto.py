@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     for input_file in args.input:
         print(f"Processing input file: {input_file}")
-        all_events = read_events_from_file(input_file, include_wakeup=True)
+        all_events += read_events_from_file(input_file, include_wakeup=True)
 
     print(f"Generating Chrome JSON trace file: {output_file}")
     generate_combined_trace_file(all_events, output_file)
