@@ -48,7 +48,7 @@ int port = 7777;
 const char *addr = "127.0.0.1";
 char node_id[TINFO_NODEID_MAX] = "1";
 int enable_sync;
-int enable_gnuplot;
+int enable_plot;
 clockid_t clockid = CLOCK_REALTIME;
 int traceduration = 3;		// trace during 3 seconds
 
@@ -217,9 +217,12 @@ static inline int sigwait_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
 #ifdef CONFIG_TRACE_BPF_EVENT
-#define GNUPLOT_TIME_DIV	100000	// divisor for gnuplot time axis unit: 100 us
+#define BPF_EVENT_TIME_DIV	1000	// divisor for time axis unit: 1 us
 
-static inline void write_gnuplot_data(struct schedstat_event *e, const char *tname)
+#define BPF_EVENT_NS_TO_UNIT(ns) \
+	(((ns) + (BPF_EVENT_TIME_DIV - 1)) / BPF_EVENT_TIME_DIV)
+
+static inline void write_plot_data(struct schedstat_event *e, const char *tname)
 {
 	static uint64_t ts_first;
 	static FILE *gpfile;
@@ -227,19 +230,19 @@ static inline void write_gnuplot_data(struct schedstat_event *e, const char *tna
 
 	if (traceduration == 0) {
 		/* trace timer expired */
-		enable_gnuplot = 0;
+		enable_plot = 0;
 		fclose(gpfile);
 		gpfile = NULL;
 		return;
 	}
 
 	if (ts_first == 0) {
-		char fname[32];
+		char fname[128];
 
-		snprintf(fname, sizeof(fname), "node-%s.gpdata", node_id);
+		snprintf(fname, sizeof(fname), "%s.gpdata", node_id);
 		gpfile = fopen(fname, "w+");
 		if (gpfile == NULL) {
-			enable_gnuplot = 0;
+			enable_plot = 0;
 			return;
 		}
 
@@ -251,19 +254,22 @@ static inline void write_gnuplot_data(struct schedstat_event *e, const char *tna
 	ts_start = bpf_ktime_to_real(e->ts_start);
 	ts_stop = bpf_ktime_to_real(e->ts_stop);
 
+#if 0
+	// This is only necessary for gnuplot
         // subtract starttimer_ts from timestamps so that timestamps start at 0
 	ts_wakeup -= ts_first;
 	ts_start -= ts_first;
 	ts_stop -= ts_first;
+#endif
 
-        // scale ns unit upto predefined time unit in round up manner
-	ts_wakeup = (ts_wakeup + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
-	ts_start = (ts_start + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
-	ts_stop = (ts_stop + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
+        // scale ns unit up to predefined time unit in round up manner
+	ts_wakeup = BPF_EVENT_NS_TO_UNIT(ts_wakeup);
+	ts_start = BPF_EVENT_NS_TO_UNIT(ts_start);
+	ts_stop = BPF_EVENT_NS_TO_UNIT(ts_stop);
 
 	// Column formatting:
 	// task event ignored resource priority activate start stop ignored
-	fprintf(gpfile, "%-16s 0 0 N%sC%d 0 %lu %lu %lu 0\n",
+	fprintf(gpfile, "%-16s 0 0 %s-C%d 0 %lu %lu %lu 0\n",
 		tname, node_id, e->cpu, ts_wakeup, ts_start, ts_stop);
 }
 
@@ -285,8 +291,8 @@ static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
 		}
 	}
 
-	if (enable_gnuplot && tt_p != NULL) {
-		write_gnuplot_data(e, tt_p->task.name);
+	if (enable_plot && tt_p != NULL) {
+		write_plot_data(e, tt_p->task.name);
 	}
 
 	return 0;
@@ -480,7 +486,7 @@ static int get_options(int argc, char *argv[])
 			enable_sync = 1;
 			break;
 		case 'g':
-			enable_gnuplot = 1;
+			enable_plot = 1;
 			break;
 		case 'h':
 		default:
@@ -492,7 +498,7 @@ static int get_options(int argc, char *argv[])
 					"  -t <seconds>\ttrace duration in seconds\n"
 					"  -n <node id>\tNode ID\n"
 					"  -s\tEnable timer synchronization across multiple nodes\n"
-					"  -g\tEnable saving gnuplot data file by using BPF (node<id>.gpdata)\n"
+					"  -g\tEnable saving plot data file by using BPF (<node id>.gpdata)\n"
 					"  -h\tshow this help\n",
 					argv[0]);
 			return -1;
