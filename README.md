@@ -29,7 +29,7 @@ Refer to [This README.md](http://mod.lge.com/hub/timpani/time-trigger/-/blob/mai
     sudo dnf install -y systemd-devel
     ```
 
-## Build
+## How to build
 
 ```
 git clone --recurse-submodules http://mod.lge.com/hub/timpani/timpani-o.git
@@ -38,6 +38,12 @@ mkdir build
 cd build
 cmake ..
 make
+```
+
+### Cross-compilation for ARM64
+
+```
+cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchain-aarch64-gcc.cmake ..
 ```
 
 ## Coding style
