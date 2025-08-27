@@ -12,6 +12,7 @@
 #include <vector>
 
 enum class LogLevel {
+    NONE = -1,
     ERROR = 0,
     WARN = 1,
     INFO = 2,
