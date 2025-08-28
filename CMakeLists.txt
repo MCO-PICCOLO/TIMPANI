@@ -20,3 +20,12 @@ add_subdirectory(src)
 
 # Add libtrpc submodule
 add_subdirectory(${CMAKE_SOURCE_DIR}/external/libtrpc)
+
+# Option to build tests
+option(BUILD_TESTS "Build unit tests" OFF)
+
+# Add tests directory if building tests
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

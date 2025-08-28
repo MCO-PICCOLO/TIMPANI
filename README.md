@@ -67,3 +67,39 @@ cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchain-aarch64-gcc.cmake ..
   ```
   timpani-o -h
   ```
+
+## Testing
+
+### Dependencies
+
+GoogleTest framework is required for testing.
+
+- On Ubuntu:
+  ```
+  sudo apt install -y libgtest-dev
+  ```
+- On CentOS:
+  ```
+  sudo dnf install -y gtest-devel
+  ```
+
+### Enable and run tests
+
+- To enable testing, configure the build with the following CMake option:
+  ```
+  cmake -DBUILD_TESTS=ON ..
+  ```
+
+- To run all tests:
+  ```
+  make test
+  ```
+
+- To run a specific unit test:
+  ```
+  ./tests/test_schedinfo_service
+  ./tests/test_dbus_server
+  ./tests/test_fault_client
+  ./tests/test_global_scheduler
+  ./tests/test_node_config
+  ```
