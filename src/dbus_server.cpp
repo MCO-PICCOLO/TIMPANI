@@ -118,10 +118,15 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
 {
     std::lock_guard<std::mutex> lock(sched_info_buf_mutex_);
 
-    // Return true if buffer is already allocated
-    if (sched_info_buf_) return true;
+    // Always free and reallocate buffer to ensure fresh data
+    // This prevents stale data when workload changes
+    if (sched_info_buf_) {
+        free_serial_buf(sched_info_buf_);
+        sched_info_buf_ = nullptr;
+    }
 
-    // FIXME: Currently only serialize the first workload in schedule info
+    // Currently only serialize the first workload in schedule info
+    // TODO: Support multiple workloads by selecting appropriate workload
     const auto& node_sched_info = map.begin()->second;
 
     // Allocate serial buffer and pack schedule info into it
@@ -210,8 +215,37 @@ void DBusServer::DMissCallback(const char* name, const char* task)
             TLOG_WARN("No schedule info available for DMissCallback");
             workload_id.clear();
         } else {
-            // FIXME: Currently only references the first workload
-            workload_id = map.begin()->first;
+            // Find workload_id by searching through all workloads and their tasks
+            bool found = false;
+            for (const auto& workload_entry : map) {
+                const std::string& wl_id = workload_entry.first;
+                const auto& node_sched_info = workload_entry.second;
+                
+                for (const auto& node_entry : node_sched_info) {
+                    const std::string& node_id = node_entry.first;
+                    const sched_info_t& sched_info = node_entry.second;
+                    
+                    // Check if this node matches the callback node and has the task
+                    if (node_id == name) {
+                        for (int i = 0; i < sched_info.num_tasks; i++) {
+                            if (std::string(sched_info.tasks[i].task_name) == task) {
+                                workload_id = wl_id;
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (found) break;
+                }
+                if (found) break;
+            }
+            
+            if (!found) {
+                TLOG_WARN("Could not find task '", task, "' on node '", name, "' in any workload");
+                // Currently only references the first workload as fallback
+                // TODO: Support workload selection based on task context
+                workload_id = map.begin()->first;
+            }
         }
     }
 
@@ -229,20 +263,24 @@ void DBusServer::SyncCallback(const char* name, int* ack, struct timespec* ts)
 
     DBusServer& instance = GetInstance();
 
-    // If node sync map is empty, initialize it based on schedule info
-    // FIXME: This should be done per workload
+    // If node sync map is empty, initialize it based on current schedule info
+    // Currently handles single workload, TODO: Support per-workload sync
     if (instance.node_sync_map_.empty()) {
         if (instance.sched_info_server_) {
             auto map = instance.sched_info_server_->GetSchedInfoMap();
-            // FIXME: Currently only initializes the first workload
-            const auto& node_sched_info = map.begin()->second;
-            for (const auto& sinfo : node_sched_info) {
-                const std::string& node_id = sinfo.first;
-                instance.node_sync_map_[node_id] = false;
+            if (!map.empty()) {
+                // Initialize sync map with all unique nodes from current workload
+                // Currently only initializes the first workload's nodes
+                // TODO: Support per-workload node synchronization
+                const auto& node_sched_info = map.begin()->second;
+                for (const auto& sinfo : node_sched_info) {
+                    const std::string& node_id = sinfo.first;
+                    instance.node_sync_map_[node_id] = false;
+                }
+                TLOG_DEBUG("Created node sync map with ",
+                           instance.node_sync_map_.size(), " entries",
+                           " for workload: ", map.begin()->first);
             }
-            TLOG_DEBUG("Created node sync map with ",
-                       instance.node_sync_map_.size(), " entries",
-                       " for ", map.begin()->first);
         }
     }
 

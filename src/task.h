@@ -10,6 +10,7 @@
 struct Task {
     // Basic task information
     std::string name;
+    std::string workload_id;         // Workload ID this task belongs to
     std::string target_node;         // Target node ID (can be empty for auto-assignment)
     int priority;
     int policy;              // Scheduling policy as integer (0: SCHED_NORMAL, 1: SCHED_FIFO, 2: SCHED_RR)

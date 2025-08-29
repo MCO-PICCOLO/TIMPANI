@@ -38,6 +38,7 @@ void GlobalScheduler::set_tasks(const std::vector<Task>& tasks)
     // Log task details
     for (const auto& task : tasks_) {
         TLOG_DEBUG("Task: ", task.name,
+                  " | Workload: ", task.workload_id,
                   " | Target Node: ", task.target_node,
                   " | Priority: ", task.priority,
                   " | Period: ", task.period_us, "us",
@@ -373,6 +374,19 @@ void GlobalScheduler::print_scheduling_results()
 {
     TLOG_INFO("=== GlobalScheduler Results ===");
 
+    // Group tasks by workload for better reporting
+    std::map<std::string, int> workload_task_counts;
+    for (const auto& task : tasks_) {
+        if (!task.assigned_node.empty()) {
+            workload_task_counts[task.workload_id]++;
+        }
+    }
+
+    // Print workload summary
+    for (const auto& wl_entry : workload_task_counts) {
+        TLOG_INFO("Workload '", wl_entry.first, "': ", wl_entry.second, " tasks scheduled");
+    }
+
     for (const auto& pair : sched_info_map_) {
         const std::string& node_id = pair.first;
         const sched_info_t& schedule = pair.second;
@@ -382,7 +396,15 @@ void GlobalScheduler::print_scheduling_results()
         if (schedule.num_tasks > 0) {
             for (int i = 0; i < schedule.num_tasks; i++) {
                 const sched_task_t& task = schedule.tasks[i];
-                TLOG_INFO("  Task: ", task.task_name,
+                // Find workload_id for this task
+                std::string task_workload = "unknown";
+                for (const auto& orig_task : tasks_) {
+                    if (orig_task.name == task.task_name && orig_task.assigned_node == node_id) {
+                        task_workload = orig_task.workload_id;
+                        break;
+                    }
+                }
+                TLOG_INFO("  Task: ", task.task_name, " (workload: ", task_workload, ")",
                          " | Period: ", task.period_ns / 1000000, "ms",
                          " | Runtime: ", task.runtime_ns / 1000000, "ms",
                          " | CPU: ", task.cpu_affinity,
@@ -438,7 +460,7 @@ void GlobalScheduler::cleanup_schedules()
     sched_info_map_.clear();
 }
 
-const std::map<std::string, sched_info_t>& GlobalScheduler::get_sched_info_map() const
+const NodeSchedInfoMap& GlobalScheduler::get_sched_info_map() const
 {
     return sched_info_map_;
 }
@@ -473,9 +495,15 @@ void GlobalScheduler::schedule_with_target_node_priority()
     int scheduled_count = 0;
 
     for (auto& task : tasks_) {
+        // Validate that task has both workload_id and target_node
+        if (task.workload_id.empty()) {
+            TLOG_ERROR("Task '", task.name, "' has no workload_id specified");
+            continue;
+        }
+
         // Rule 1: target_node must be assigned as assigned_node
         if (task.target_node.empty()) {
-            TLOG_ERROR("Task '", task.name, "' has no target_node specified");
+            TLOG_ERROR("Task '", task.name, "' (workload: ", task.workload_id, ") has no target_node specified");
             continue;
         }
 

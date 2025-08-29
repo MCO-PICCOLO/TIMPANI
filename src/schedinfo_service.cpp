@@ -41,11 +41,14 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
 
     std::unique_lock<std::shared_mutex> lock(sched_info_mutex_);
 
-    // TODO: Support for multi-workloads aka. multiple AddSchedInfo gRPC calls)
+    // Currently only supports one workload at a time
+    // Clear previous workload if exists to support workload replacement
     if (!sched_info_map_.empty()) {
-        TLOG_ERROR("FIXME: Only 1 workload is supported.");
-        reply->set_status(-1);  // Indicate failure
-        return Status::OK;
+        std::string prev_workload = sched_info_map_.begin()->first;
+        TLOG_WARN("Replacing existing workload '", prev_workload, "' with new workload '", request->workload_id(), "'");
+        sched_info_map_.clear();
+        // Clear global scheduler state when replacing workload
+        global_scheduler_->clear();
     }
 
     // Convert gRPC TaskInfo to internal Task structures
@@ -54,6 +57,18 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
     // Use GlobalScheduler to process tasks
     global_scheduler_->clear();
     global_scheduler_->set_tasks(tasks);
+
+    // Validate workload distribution across nodes
+    std::map<std::string, int> node_task_counts;
+    for (const auto& task : tasks) {
+        node_task_counts[task.target_node]++;
+    }
+    
+    TLOG_INFO("Workload '", request->workload_id(), "' distributes tasks across ", 
+              node_task_counts.size(), " nodes:");
+    for (const auto& entry : node_task_counts) {
+        TLOG_INFO("  Node '", entry.first, "': ", entry.second, " tasks");
+    }
 
     // Execute scheduling algorithm with new target node priority logic
     bool scheduling_success = global_scheduler_->schedule("target_node_priority");
@@ -64,9 +79,19 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
     }
 
     // Get scheduled results from GlobalScheduler
-    const auto& node_sched_map = global_scheduler_->get_sched_info_map();
+    const NodeSchedInfoMap& node_sched_map = global_scheduler_->get_sched_info_map();
+
+    // Verify the structure: NodeSchedInfoMap is std::map<std::string, sched_info_t>
+    // where key is node_id and value is sched_info_t containing tasks for that node
+    TLOG_INFO("Generated schedules for ", node_sched_map.size(), " nodes:");
+    for (const auto& entry : node_sched_map) {
+        const std::string& node_id = entry.first;
+        const sched_info_t& sched_info = entry.second;
+        TLOG_INFO("  Node '", node_id, "': ", sched_info.num_tasks, " tasks");
+    }
 
     // Store in our sched_info_map_ (copy the results)
+    // sched_info_map_[workload_id] = NodeSchedInfoMap (node_id -> sched_info_t)
     sched_info_map_[request->workload_id()] = node_sched_map;
 
     TLOG_INFO("Successfully scheduled ", global_scheduler_->get_total_scheduled_tasks(),
@@ -85,6 +110,7 @@ std::vector<Task> SchedInfoServiceImpl::ConvertTaskInfoToTasks(const SchedInfo* 
 
         Task task;
         task.name = grpc_task.name();
+        task.workload_id = request->workload_id();  // Set workload_id from request
         task.policy = SchedPolicyToInt(static_cast<SchedPolicy>(grpc_task.policy()));
         task.priority = grpc_task.priority();
         task.cpu_affinity = grpc_task.cpu_affinity();

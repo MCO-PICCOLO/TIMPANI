@@ -8,6 +8,9 @@
 #include <string>
 #include <memory>
 
+// Type definitions for consistency with schedinfo_service.h
+using NodeSchedInfoMap = std::map<std::string, sched_info_t>; // node_id -> sched_info_t
+
 /**
  * @brief Global scheduler for task scheduling across multiple nodes
  *
@@ -40,7 +43,7 @@ public:
      * @brief Get the final schedules map (node_id -> sched_info_t)
      * @return Map of node schedules
      */
-    const std::map<std::string, sched_info_t>& get_sched_info_map() const;
+    const NodeSchedInfoMap& get_sched_info_map() const;
 
     /**
      * @brief Check if schedules are available
@@ -73,7 +76,7 @@ private:
     std::vector<Task> tasks_;
 
     // Final schedule map (node_id -> sched_info_t)
-    std::map<std::string, sched_info_t> sched_info_map_;
+    NodeSchedInfoMap sched_info_map_;
 
     // CPU_UTILIZATION_THRESHOLD
     static constexpr double CPU_UTILIZATION_THRESHOLD = 0.90;

@@ -6,6 +6,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <unordered_map>
 
 #include "schedinfo_service.h"
 
