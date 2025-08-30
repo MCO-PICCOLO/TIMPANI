@@ -326,6 +326,9 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 	uint32_t i;
 	uint32_t cid_size;
 
+	uint64_t hyperperiod_us = 0;
+	char workload_id[64] = { 0 };
+
 	// Unpack sched_info
 	deserialize_int32_t(sbuf, &sinfo->nr_tasks);
 	sinfo->tasks = NULL;
@@ -369,6 +372,11 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 		printf("tinfo->node_id: %s\n", tinfo->node_id);
 #endif
 	}
+
+	deserialize_str(sbuf, workload_id);
+	deserialize_int64_t(sbuf, &hyperperiod_us);
+	printf("\n\nworkload: %s\n", workload_id);
+	printf("hyperperiod: %lu us\n", hyperperiod_us);
 
 	return 0;
 }
