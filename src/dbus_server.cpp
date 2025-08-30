@@ -118,23 +118,36 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
 {
     std::lock_guard<std::mutex> lock(sched_info_buf_mutex_);
 
-    // Always free and reallocate buffer to ensure fresh data
-    // This prevents stale data when workload changes
-    if (sched_info_buf_) {
-        free_serial_buf(sched_info_buf_);
-        sched_info_buf_ = nullptr;
-    }
+    // Return true if buffer is already allocated
+    if (sched_info_buf_) return true;
 
     // Currently only serialize the first workload in schedule info
     // TODO: Support multiple workloads by selecting appropriate workload
     const auto& node_sched_info = map.begin()->second;
+    const std::string& workload_id = map.begin()->first;
+
+    // Get hyperperiod information for this workload
+    DBusServer& instance = GetInstance();
+    const HyperperiodInfo* hyperperiod_info = nullptr;
+    if (instance.sched_info_server_) {
+        hyperperiod_info = instance.sched_info_server_->GetHyperperiodInfo(workload_id);
+    }
 
     // Allocate serial buffer and pack schedule info into it
-    sched_info_buf_ = new_serial_buf(1024);
+    sched_info_buf_ = new_serial_buf(1024 + 256); // Extra space for hyperperiod
     if (!sched_info_buf_) {
         TLOG_ERROR("Failed to allocate memory for schedule info buffer");
         return false;
     }
+
+    // First serialize hyperperiod information if available
+    uint64_t hyperperiod_us = 0;
+    if (hyperperiod_info) {
+        hyperperiod_us = hyperperiod_info->hyperperiod_us;
+        TLOG_DEBUG("Including hyperperiod ", hyperperiod_us, " us for workload ", workload_id);
+    }
+    serialize_int64_t(sched_info_buf_, hyperperiod_us);
+    serialize_str(sched_info_buf_, workload_id.substr(0, 64 - 1).c_str());
 
     int nr_tasks = 0;
     for (const auto& sinfo : node_sched_info) {
@@ -165,7 +178,7 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
     }
     serialize_int32_t(sched_info_buf_, nr_tasks);
 
-    TLOG_DEBUG("Serialized sched_info_buf_: ", sched_info_buf_->pos, " bytes");
+    TLOG_DEBUG("Serialized sched_info_buf_: ", sched_info_buf_->pos, " bytes with hyperperiod ", hyperperiod_us, " us");
 
     return true;
 }

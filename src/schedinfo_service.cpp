@@ -4,10 +4,13 @@
 SchedInfoServiceImpl::SchedInfoServiceImpl(std::shared_ptr<NodeConfigManager> node_config_manager)
     : node_config_manager_(node_config_manager)
 {
-    TLOG_INFO("SchedInfoServiceImpl created with GlobalScheduler integration");
+    TLOG_INFO("SchedInfoServiceImpl created with GlobalScheduler and HyperperiodManager integration");
 
     // Create GlobalScheduler instance
     global_scheduler_ = std::make_shared<GlobalScheduler>(node_config_manager_);
+
+    // Create HyperperiodManager instance
+    hyperperiod_manager_ = std::make_shared<HyperperiodManager>();
 
     if (node_config_manager_ && node_config_manager_->IsLoaded()) {
         TLOG_INFO("Node configuration loaded with ", node_config_manager_->GetAllNodes().size(), " nodes");
@@ -49,10 +52,20 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
         sched_info_map_.clear();
         // Clear global scheduler state when replacing workload
         global_scheduler_->clear();
+        // Clear hyperperiod information for previous workload
+        hyperperiod_manager_->ClearWorkload(prev_workload);
     }
 
     // Convert gRPC TaskInfo to internal Task structures
     std::vector<Task> tasks = ConvertTaskInfoToTasks(request);
+
+    // Calculate hyperperiod for this workload BEFORE scheduling
+    uint64_t hyperperiod = hyperperiod_manager_->CalculateHyperperiod(request->workload_id(), tasks);
+    if (hyperperiod == 0) {
+        TLOG_ERROR("Failed to calculate hyperperiod for workload: ", request->workload_id());
+        reply->set_status(-1);  // Indicate failure
+        return Status::OK;
+    }
 
     // Use GlobalScheduler to process tasks
     global_scheduler_->clear();
@@ -96,6 +109,8 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
 
     TLOG_INFO("Successfully scheduled ", global_scheduler_->get_total_scheduled_tasks(),
             " tasks across ", node_sched_map.size(), " nodes");
+    TLOG_INFO("Hyperperiod for workload '", request->workload_id(), "': ", 
+              hyperperiod, " us (", hyperperiod / 1000, " ms)");
     reply->set_status(0);  // Success
     return Status::OK;
 }
@@ -150,6 +165,16 @@ SchedInfoMap SchedInfoServiceImpl::GetSchedInfoMap() const
 {
     std::shared_lock<std::shared_mutex> lock(sched_info_mutex_);
     return sched_info_map_;
+}
+
+const HyperperiodInfo* SchedInfoServiceImpl::GetHyperperiodInfo(const std::string& workload_id) const
+{
+    return hyperperiod_manager_->GetHyperperiodInfo(workload_id);
+}
+
+const std::map<std::string, HyperperiodInfo>& SchedInfoServiceImpl::GetAllHyperperiods() const
+{
+    return hyperperiod_manager_->GetAllHyperperiods();
 }
 
 int SchedInfoServiceImpl::SchedPolicyToInt(SchedPolicy policy)
@@ -210,6 +235,16 @@ void SchedInfoServer::Stop()
 SchedInfoMap SchedInfoServer::GetSchedInfoMap() const
 {
     return service_.GetSchedInfoMap();
+}
+
+const HyperperiodInfo* SchedInfoServer::GetHyperperiodInfo(const std::string& workload_id) const
+{
+    return service_.GetHyperperiodInfo(workload_id);
+}
+
+const std::map<std::string, HyperperiodInfo>& SchedInfoServer::GetAllHyperperiods() const
+{
+    return service_.GetAllHyperperiods();
 }
 
 void SchedInfoServer::DumpSchedInfo()

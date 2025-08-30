@@ -10,6 +10,7 @@
 #include "proto/schedinfo.grpc.pb.h"
 #include "node_config.h"  // Include NodeConfigManager
 #include "global_scheduler.h"  // Include GlobalScheduler
+#include "hyperperiod_manager.h"  // Include HyperperiodManager
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -40,6 +41,19 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
 
     SchedInfoMap GetSchedInfoMap() const;
 
+    /**
+     * @brief Get hyperperiod information for a specific workload
+     * @param workload_id The workload identifier
+     * @return Pointer to HyperperiodInfo or nullptr if not found
+     */
+    const HyperperiodInfo* GetHyperperiodInfo(const std::string& workload_id) const;
+
+    /**
+     * @brief Get all hyperperiod information
+     * @return Map of workload_id to HyperperiodInfo
+     */
+    const std::map<std::string, HyperperiodInfo>& GetAllHyperperiods() const;
+
   private:
     static int SchedPolicyToInt(SchedPolicy policy);
 
@@ -54,6 +68,8 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
     std::shared_ptr<NodeConfigManager> node_config_manager_;
     // Global scheduler
     std::shared_ptr<GlobalScheduler> global_scheduler_;
+    // Hyperperiod manager
+    std::shared_ptr<HyperperiodManager> hyperperiod_manager_;
 };
 
 /**
@@ -70,6 +86,20 @@ class SchedInfoServer
     bool Start(int port);
     void Stop();
     SchedInfoMap GetSchedInfoMap() const;
+    
+    /**
+     * @brief Get hyperperiod information for a specific workload
+     * @param workload_id The workload identifier
+     * @return Pointer to HyperperiodInfo or nullptr if not found
+     */
+    const HyperperiodInfo* GetHyperperiodInfo(const std::string& workload_id) const;
+
+    /**
+     * @brief Get all hyperperiod information
+     * @return Map of workload_id to HyperperiodInfo
+     */
+    const std::map<std::string, HyperperiodInfo>& GetAllHyperperiods() const;
+    
     void DumpSchedInfo();
 
  private:
