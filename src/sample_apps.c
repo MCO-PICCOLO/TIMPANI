@@ -20,6 +20,11 @@
 #define ALGO_NSQRT	1
 #define ALGO_FIBO	2
 #define ALGO_BUSY	3
+#define ALGO_MATRIX	4
+#define ALGO_MEMORY	5
+#define ALGO_CRYPTO	6
+#define ALGO_MIXED	7
+#define ALGO_PRIME	8
 
 /* Global variables */
 char pr_name[16];
@@ -106,6 +111,242 @@ static int stress_cpu_fibonacci(void)
 }
 
 /*
+ *   stress_cpu_matrix()
+ *	matrix multiplication workload
+ */
+static int stress_cpu_matrix(int size)
+{
+	if (size <= 0) size = 64; // Default matrix size
+
+	// Allocate matrices
+	double **a = malloc(size * sizeof(double*));
+	double **b = malloc(size * sizeof(double*));
+	double **c = malloc(size * sizeof(double*));
+
+	for (int i = 0; i < size; i++) {
+		a[i] = malloc(size * sizeof(double));
+		b[i] = malloc(size * sizeof(double));
+		c[i] = malloc(size * sizeof(double));
+	}
+
+	// Initialize matrices with random values
+	for (int i = 0; i < size; i++) {
+		for (int j = 0; j < size; j++) {
+			a[i][j] = (double)rand() / RAND_MAX;
+			b[i][j] = (double)rand() / RAND_MAX;
+			c[i][j] = 0.0;
+		}
+	}
+
+	// Matrix multiplication
+	for (int i = 0; i < size; i++) {
+		for (int j = 0; j < size; j++) {
+			for (int k = 0; k < size; k++) {
+				c[i][j] += a[i][k] * b[k][j];
+			}
+		}
+	}
+
+	// Calculate checksum to prevent optimization
+	double checksum = 0.0;
+	for (int i = 0; i < size; i++) {
+		for (int j = 0; j < size; j++) {
+			checksum += c[i][j];
+		}
+	}
+
+	// Cleanup
+	for (int i = 0; i < size; i++) {
+		free(a[i]);
+		free(b[i]);
+		free(c[i]);
+	}
+	free(a);
+	free(b);
+	free(c);
+
+	// Use checksum to prevent dead code elimination
+	if (checksum < 0) return EXIT_FAILURE;
+
+	return EXIT_SUCCESS;
+}
+
+/*
+ *   stress_cpu_memory()
+ *	memory intensive workload with random access patterns
+ */
+static int stress_cpu_memory(int size_mb)
+{
+	if (size_mb <= 0) size_mb = 16; // Default 16MB
+
+	size_t total_size = size_mb * 1024 * 1024;
+	size_t num_ints = total_size / sizeof(int);
+
+	int *buffer = malloc(total_size);
+	if (!buffer) {
+		perror("Failed to allocate memory");
+		return EXIT_FAILURE;
+	}
+
+	// Initialize with random data
+	for (size_t i = 0; i < num_ints; i++) {
+		buffer[i] = rand();
+	}
+
+	// Random access pattern
+	int checksum = 0;
+	size_t iterations = num_ints / 4; // Access 25% of memory
+
+	for (size_t i = 0; i < iterations; i++) {
+		size_t idx = rand() % num_ints;
+		checksum += buffer[idx];
+		buffer[idx] = checksum ^ i;
+	}
+
+	free(buffer);
+
+	// Use checksum to prevent optimization
+	if (checksum == 0x12345678) return EXIT_FAILURE;
+
+	return EXIT_SUCCESS;
+}
+
+/*
+ *   stress_cpu_crypto()
+ *	cryptographic hash simulation (simplified SHA-like)
+ */
+static int stress_cpu_crypto(int rounds)
+{
+	if (rounds <= 0) rounds = 1000;
+
+	uint32_t hash[8] = {
+		0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+		0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+	};
+
+	uint32_t data[16];
+	for (int i = 0; i < 16; i++) {
+		data[i] = rand();
+	}
+
+	for (int round = 0; round < rounds; round++) {
+		// Simplified hash computation
+		for (int i = 0; i < 64; i++) {
+			uint32_t w = data[i % 16];
+			w = ((w << 1) | (w >> 31)) ^ hash[i % 8];
+
+			uint32_t temp = hash[7] + w + i;
+			hash[7] = hash[6];
+			hash[6] = hash[5];
+			hash[5] = hash[4];
+			hash[4] = hash[3] + temp;
+			hash[3] = hash[2];
+			hash[2] = hash[1];
+			hash[1] = hash[0];
+			hash[0] = temp;
+		}
+
+		// Update data for next round
+		for (int i = 0; i < 16; i++) {
+			data[i] ^= hash[i % 8];
+		}
+	}
+
+	// Use result to prevent optimization
+	uint32_t final_hash = 0;
+	for (int i = 0; i < 8; i++) {
+		final_hash ^= hash[i];
+	}
+
+	if (final_hash == 0) return EXIT_FAILURE;
+
+	return EXIT_SUCCESS;
+}
+
+/*
+ *   stress_cpu_prime()
+ *	prime number calculation using sieve of Eratosthenes
+ */
+static int stress_cpu_prime(int limit)
+{
+	if (limit <= 0) limit = 100000; // Default limit
+
+	bool *is_prime = malloc((limit + 1) * sizeof(bool));
+	if (!is_prime) {
+		perror("Failed to allocate memory for prime sieve");
+		return EXIT_FAILURE;
+	}
+
+	// Initialize sieve
+	for (int i = 0; i <= limit; i++) {
+		is_prime[i] = true;
+	}
+
+	is_prime[0] = is_prime[1] = false;
+
+	// Sieve of Eratosthenes
+	for (int i = 2; i * i <= limit; i++) {
+		if (is_prime[i]) {
+			for (int j = i * i; j <= limit; j += i) {
+				is_prime[j] = false;
+			}
+		}
+	}
+
+	// Count primes
+	int prime_count = 0;
+	for (int i = 2; i <= limit; i++) {
+		if (is_prime[i]) {
+			prime_count++;
+		}
+	}
+
+	free(is_prime);
+
+	// Expected prime count for validation
+	if (limit == 100000 && prime_count != 9592) {
+		printf("Prime calculation error: expected 9592, got %d\n", prime_count);
+		return EXIT_FAILURE;
+	}
+
+	return EXIT_SUCCESS;
+}
+
+/*
+ *   stress_cpu_mixed()
+ *	mixed workload combining different stress types
+ */
+static int stress_cpu_mixed(int intensity)
+{
+	if (intensity <= 0) intensity = 10;
+
+	int result = EXIT_SUCCESS;
+
+	// Mix of different workloads based on intensity
+	switch (intensity % 4) {
+		case 0:
+			result |= stress_cpu_nsqrt();
+			result |= stress_cpu_matrix(8 + intensity);
+			break;
+		case 1:
+			result |= stress_cpu_fibonacci();
+			result |= stress_cpu_crypto(100 * intensity);
+			break;
+		case 2:
+			result |= stress_cpu_memory(1 + intensity / 10);
+			result |= stress_cpu_prime(10000 + intensity * 1000);
+			break;
+		case 3:
+			result |= stress_cpu_matrix(16);
+			result |= stress_cpu_crypto(50 * intensity);
+			result |= stress_cpu_nsqrt();
+			break;
+	}
+
+	return result;
+}
+
+/*
  *   stress_cpu_busyloop()
  *	do busy-loop for the given runtime
  */
@@ -140,6 +381,20 @@ static void do_calculations(int loop_count) {
 		}
 	} else if (algo == ALGO_BUSY) {
 		stress_cpu_busyloop(loop_count);
+	} else if (algo == ALGO_MATRIX) {
+		for (int i = 0; i < loop_count; i++) {
+			stress_cpu_matrix(32 + i * 4); // Progressive matrix size
+		}
+	} else if (algo == ALGO_MEMORY) {
+		stress_cpu_memory(loop_count); // loop_count as MB size
+	} else if (algo == ALGO_CRYPTO) {
+		stress_cpu_crypto(loop_count * 100); // loop_count * 100 rounds
+	} else if (algo == ALGO_MIXED) {
+		for (int i = 0; i < loop_count; i++) {
+			stress_cpu_mixed(i + 1);
+		}
+	} else if (algo == ALGO_PRIME) {
+		stress_cpu_prime(loop_count * 10000); // loop_count * 10K limit
 	}
 }
 
@@ -263,14 +518,39 @@ static void print_usage(const char *prog_name) {
     printf("  -d, --deadline DEADLINE Deadline in milliseconds (default: period)\n");
     printf("  -r, --runtime RUNTIME   Expected runtime in microseconds (default: 50000)\n");
     printf("  -P, --priority PRIORITY Real-time priority 1-99 (default: 50)\n");
-    printf("  -a, --algorithm ALGO    Algorithm: 1=NSQRT, 2=Fibonacci, 3=Busy loop (default: 1)\n");
-    printf("  -l, --loops LOOPS       Loop count for algorithms 1&2, runtime_us for algo 3 (default: 10)\n");
+    printf("  -a, --algorithm ALGO    Algorithm selection (default: 1)\n");
+    printf("                          1: NSQRT - Newton-Raphson square root\n");
+    printf("                          2: Fibonacci - Fibonacci sequence\n");
+    printf("                          3: Busy loop - CPU-bound busy waiting\n");
+    printf("                          4: Matrix - Matrix multiplication\n");
+    printf("                          5: Memory - Memory-intensive random access\n");
+    printf("                          6: Crypto - Cryptographic hash simulation\n");
+    printf("                          7: Mixed - Mixed workload combination\n");
+    printf("                          8: Prime - Prime number calculation\n");
+    printf("  -l, --loops LOOPS       Loop count/parameter (default: 10)\n");
+    printf("                          Algo 1,2,7: iteration count\n");
+    printf("                          Algo 3: runtime in microseconds\n");
+    printf("                          Algo 4: matrix size factor\n");
+    printf("                          Algo 5: memory size in MB\n");
+    printf("                          Algo 6: crypto rounds factor\n");
+    printf("                          Algo 8: prime limit factor (×10K)\n");
     printf("  -s, --stats             Enable detailed statistics (default: enabled)\n");
     printf("  -t, --timer             Use timer-based periodic execution (default: signal-based)\n");
     printf("  -h, --help              Show this help message\n");
-    printf("\nExamples:\n");
-    printf("  %s -p 50 -d 45 -r 30000 -P 80 mytask\n", prog_name);
-    printf("  %s --period 100 --algorithm 2 --loops 5 fibonacci_task\n", prog_name);
+    printf("\nWorkload Examples:\n");
+    printf("  Light CPU workload:\n");
+    printf("    %s -p 100 -d 90 -a 1 -l 5 light_task\n", prog_name);
+    printf("  Heavy matrix computation:\n");
+    printf("    %s -p 200 -d 180 -a 4 -l 10 matrix_task\n", prog_name);
+    printf("  Memory stress test:\n");
+    printf("    %s -p 500 -d 450 -a 5 -l 32 memory_task\n", prog_name);
+    printf("  Mixed workload:\n");
+    printf("    %s -p 50 -d 45 -a 7 -l 8 mixed_task\n", prog_name);
+    printf("\nRuntime Measurement Guide:\n");
+    printf("  - Start with light workloads to measure baseline runtime\n");
+    printf("  - Increase loop count gradually to reach target runtime\n");
+    printf("  - Set deadline 10-20%% less than measured runtime for safety margin\n");
+    printf("  - Monitor deadline miss rate and adjust accordingly\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -322,8 +602,8 @@ int main(int argc, char *argv[]) {
 			break;
 		case 'a':
 			algo = atoi(optarg);
-			if (algo < 1 || algo > 3) {
-				fprintf(stderr, "Algorithm must be 1, 2, or 3\n");
+			if (algo < 1 || algo > 8) {
+				fprintf(stderr, "Algorithm must be between 1 and 8\n");
 				return EXIT_FAILURE;
 			}
 			break;
@@ -391,7 +671,13 @@ int main(int argc, char *argv[]) {
 	printf("Priority:        %d\n", task_config.priority);
 	printf("Algorithm:       %d (%s)\n", algo,
 	       algo == ALGO_NSQRT ? "Newton-Raphson sqrt" :
-	       algo == ALGO_FIBO ? "Fibonacci" : "Busy loop");
+	       algo == ALGO_FIBO ? "Fibonacci" :
+	       algo == ALGO_BUSY ? "Busy loop" :
+	       algo == ALGO_MATRIX ? "Matrix multiplication" :
+	       algo == ALGO_MEMORY ? "Memory intensive" :
+	       algo == ALGO_CRYPTO ? "Cryptographic hash" :
+	       algo == ALGO_MIXED ? "Mixed workload" :
+	       algo == ALGO_PRIME ? "Prime calculation" : "Unknown");
 	printf("Loop count:      %d\n", loop_cnt);
 	printf("Execution mode:  %s\n", use_timer ? "Timer-based" : "Signal-based");
 	printf("=====================================\n");

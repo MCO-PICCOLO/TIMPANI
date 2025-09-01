@@ -8,7 +8,15 @@
 - **데드라인 모니터링**: 데드라인 위반 감지 및 통계
 - **런타임 측정**: 정확한 실행 시간 측정 및 통계 수집
 - **실시간 우선순위**: SCHED_FIFO 스케줄링 정책 지원
-- **다양한 워크로드**: Newton-Raphson 제곱근, 피보나치, 바쁜 대기 알고리즘
+- **다양한 워크로드**: 8가지 다양한 워크로드 알고리즘 지원
+  - Newton-Raphson 제곱근 계산 (CPU 집약적)
+  - 피보나치 수열 계산 (순차 계산)
+  - 바쁜 대기 루프 (순수 CPU 시간)
+  - 행렬 곱셈 (FPU 집약적)
+  - 메모리 집약적 랜덤 액세스
+  - 암호화 해시 시뮬레이션
+  - 혼합 워크로드 조합
+  - 소수 계산 (메모리 순차 액세스)
 - **통계 보고서**: 최소/최대/평균 실행 시간, 데드라인 위반율 등
 
 ## 빌드 방법
@@ -37,8 +45,8 @@ sudo ./sample_apps [OPTIONS] <task_name>
 | `-d, --deadline DEADLINE` | 데드라인 (밀리초) | period와 동일 |
 | `-r, --runtime RUNTIME` | 예상 실행시간 (마이크로초) | 50000 |
 | `-P, --priority PRIORITY` | 실시간 우선순위 (1-99) | 50 |
-| `-a, --algorithm ALGO` | 알고리즘 (1=NSQRT, 2=Fibonacci, 3=Busy loop) | 1 |
-| `-l, --loops LOOPS` | 루프 횟수 (알고리즘 1,2) 또는 실행시간(알고리즘 3) | 10 |
+| `-a, --algorithm ALGO` | 알고리즘 선택 (1-8) | 1 |
+| `-l, --loops LOOPS` | 루프 횟수/파라미터 | 10 |
 | `-s, --stats` | 상세 통계 활성화 | 기본 활성화 |
 | `-t, --timer` | 타이머 기반 주기 실행 | 신호 기반 |
 | `-h, --help` | 도움말 표시 | - |
@@ -51,25 +59,60 @@ sudo ./sample_apps [OPTIONS] <task_name>
 sudo ./sample_apps mytask
 ```
 
-#### 2. 고성능 실시간 태스크
+## 워크로드 알고리즘
+
+### 사용 가능한 알고리즘 (8가지)
+
+| 알고리즘 | 번호 | 설명 | 특징 | 적합한 용도 |
+|----------|------|------|------|-------------|
+| NSQRT | 1 | Newton-Raphson 제곱근 | CPU 집약적, 부동소수점 연산 | 수치 계산, 기본 성능 테스트 |
+| Fibonacci | 2 | 피보나치 수열 계산 | 순차적 계산, 정수 연산 | 알고리즘 성능 테스트 |
+| Busy loop | 3 | 바쁜 대기 루프 | 순수 CPU 시간 소모 | 정확한 시간 제어 |
+| Matrix | 4 | 행렬 곱셈 | FPU 집약적, 캐시 효과 | 수치 연산, 메모리 계층 테스트 |
+| Memory | 5 | 메모리 집약적 액세스 | 랜덤 메모리 접근, 캐시 미스 | 메모리 시스템 성능 테스트 |
+| Crypto | 6 | 암호화 해시 시뮬레이션 | 비트 연산, 정수 연산 | 보안 연산 시뮬레이션 |
+| Mixed | 7 | 혼합 워크로드 | 다양한 연산 조합 | 실제 애플리케이션 시뮬레이션 |
+| Prime | 8 | 소수 계산 | 메모리 순차 접근, 조건문 | 메모리 대역폭 테스트 |
+
+### 워크로드별 실행 예제
+
+#### 1. 기본 실행 (Newton-Raphson)
 ```bash
-# 10ms 주기, 9ms 데드라인, 높은 우선순위(90)
-sudo ./sample_apps -p 10 -d 9 -P 90 high_freq_task
+# 100ms 주기, 90ms 데드라인, 기본 알고리즘
+sudo ./sample_apps -p 100 -d 90 -a 1 -l 5 basic_task
 ```
 
-#### 3. 피보나치 알고리즘 사용
+#### 2. 행렬 곱셈 워크로드
 ```bash
-# 50ms 주기, 피보나치 알고리즘, 5회 반복
-sudo ./sample_apps -p 50 -a 2 -l 5 fibonacci_task
+# 200ms 주기, 행렬 곱셈, 크기 조절 파라미터 10
+sudo ./sample_apps -p 200 -d 180 -a 4 -l 10 matrix_task
 ```
 
-#### 4. 바쁜 대기 알고리즘
+#### 3. 메모리 집약적 워크로드
 ```bash
-# 20ms 주기, 15ms 바쁜 대기 (15000us)
-sudo ./sample_apps -p 20 -a 3 -l 15000 busy_task
+# 500ms 주기, 32MB 메모리 테스트
+sudo ./sample_apps -p 500 -d 450 -a 5 -l 32 memory_task
 ```
 
-#### 5. 타이머 기반 주기 실행
+#### 4. 암호화 워크로드
+```bash
+# 50ms 주기, 암호화 해시, 2000 라운드
+sudo ./sample_apps -p 50 -d 45 -a 6 -l 20 crypto_task
+```
+
+#### 5. 혼합 워크로드
+```bash
+# 100ms 주기, 혼합 워크로드, 강도 8
+sudo ./sample_apps -p 100 -d 90 -a 7 -l 8 mixed_task
+```
+
+#### 6. 소수 계산 워크로드
+```bash
+# 300ms 주기, 500,000까지 소수 계산
+sudo ./sample_apps -p 300 -d 270 -a 8 -l 50 prime_task
+```
+
+#### 7. 타이머 기반 주기 실행
 ```bash
 # 타이머를 사용한 자동 주기 실행 (외부 신호 불필요)
 sudo ./sample_apps -t -p 100 timer_task
@@ -182,6 +225,28 @@ sudo systemctl stop irqbalance
 - **데드라인 = 주기**: 주기적 태스크의 기본 설정
 - **짧은 주기 (< 10ms)**: 고주파수 제어 시스템
 - **긴 주기 (> 100ms)**: 모니터링 및 로깅 태스크
+
+## 워크로드 기반 Runtime 측정
+
+자세한 워크로드 분석과 runtime 측정 방법은 [`WORKLOAD_GUIDE.md`](./WORKLOAD_GUIDE.md)를 참조하세요.
+
+### 빠른 측정 가이드
+
+1. **기준점 측정**: 최소 파라미터로 각 워크로드의 기본 실행시간 측정
+2. **점진적 증가**: 목표 runtime에 도달할 때까지 파라미터 조정
+3. **Period 설정**: `Period = Target_Runtime + Safety_Margin + System_Overhead`
+4. **Deadline 설정**: `Deadline = Period × (0.8 ~ 0.95)` (엄격함에 따라)
+
+### 워크로드별 예상 Runtime 참고표
+
+| 알고리즘 | 파라미터 예제 | 예상 Runtime | 권장 Period/Deadline |
+|----------|---------------|---------------|---------------------|
+| NSQRT | `-l 5` | ~100μs | 50ms/45ms |
+| Matrix | `-l 5` | ~1.5ms | 100ms/90ms |
+| Memory | `-l 8` | ~52ms | 200ms/180ms |
+| Crypto | `-l 5` | ~185μs | 50ms/45ms |
+| Mixed | `-l 3` | ~5.7ms | 100ms/90ms |
+| Prime | `-l 10` | ~수ms | 100ms/90ms |
 
 ## 문제 해결
 
