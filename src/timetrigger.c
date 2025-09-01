@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,6 +8,7 @@
 #include <signal.h>
 #include <sched.h>
 #include <time.h>
+#include <getopt.h>
 #include <sys/queue.h>
 
 #include "libtttrace.h"
@@ -32,13 +34,69 @@ struct time_trigger {
 
 LIST_HEAD(listhead, time_trigger);
 
-static struct sched_info sched_info;
-
-// libtrpc D-Bus variables
-static sd_event *trpc_event;
-static sd_bus *trpc_dbus;
-
+// Forward declarations
+static void free_task_list(struct task_info *tasks);
 static void remove_tt_node(struct time_trigger *tt_node);
+static void cleanup_resources(void);
+static void signal_handler(int signo);
+static void setup_signal_handlers(void);
+
+static volatile sig_atomic_t shutdown_requested = 0;
+static struct listhead *global_tt_list = NULL;
+
+// Global sched_info and D-Bus variables
+static struct sched_info sched_info;
+static sd_event *trpc_event = NULL;
+static sd_bus *trpc_dbus = NULL;
+
+static void cleanup_resources(void)
+{
+	if (global_tt_list) {
+		struct time_trigger *tt_p;
+		while (!LIST_EMPTY(global_tt_list)) {
+			tt_p = LIST_FIRST(global_tt_list);
+			bpf_del_pid(tt_p->task.pid);
+			remove_tt_node(tt_p);
+		}
+	}
+
+	// Clean up sched_info tasks
+	free_task_list(sched_info.tasks);
+	sched_info.tasks = NULL;
+
+	// Clean up D-Bus resources
+	if (trpc_dbus) {
+		sd_bus_unref(trpc_dbus);
+		trpc_dbus = NULL;
+	}
+	if (trpc_event) {
+		sd_event_unref(trpc_event);
+		trpc_event = NULL;
+	}
+
+	// Turn off BPF and tracing
+	bpf_off();
+	tracer_off();
+}
+
+static void signal_handler(int signo)
+{
+	shutdown_requested = 1;
+	write_trace_marker("Shutdown signal received: %d\n", signo);
+}
+
+static void setup_signal_handlers(void)
+{
+	struct sigaction sa;
+
+	sa.sa_handler = signal_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+}
+
 static int report_dmiss(sd_bus *dbus, char *node_id, const char *taskname);
 
 // default option values
@@ -321,6 +379,16 @@ static int init_trpc(const char *addr, int port, sd_bus **dbus_ret, sd_event **e
 	return 0;
 }
 
+static void free_task_list(struct task_info *tasks)
+{
+	struct task_info *current = tasks;
+	while (current) {
+		struct task_info *next = current->next;
+		free(current);
+		current = next;
+	}
+}
+
 static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 {
 	uint32_t i;
@@ -330,7 +398,10 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 	char workload_id[64] = { 0 };
 
 	// Unpack sched_info
-	deserialize_int32_t(sbuf, &sinfo->nr_tasks);
+	if (deserialize_int32_t(sbuf, &sinfo->nr_tasks) < 0) {
+		fprintf(stderr, "Failed to deserialize nr_tasks\n");
+		return -1;
+	}
 	sinfo->tasks = NULL;
 
 #if 0
@@ -341,20 +412,28 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 	for (i = 0; i < sinfo->nr_tasks; i++) {
 		struct task_info *tinfo = malloc(sizeof(struct task_info));
 		if (tinfo == NULL) {
-			// out of memory
+			fprintf(stderr, "Failed to allocate memory for task_info\n");
+			free_task_list(sinfo->tasks);
+			sinfo->tasks = NULL;
 			return -1;
 		}
 
-		deserialize_str(sbuf, tinfo->node_id);
-		deserialize_int32_t(sbuf, &tinfo->allowable_deadline_misses);
-		deserialize_int64_t(sbuf, &tinfo->cpu_affinity);
-		deserialize_int32_t(sbuf, &tinfo->deadline);
-		deserialize_int32_t(sbuf, &tinfo->runtime);
-		deserialize_int32_t(sbuf, &tinfo->release_time);
-		deserialize_int32_t(sbuf, &tinfo->period);
-		deserialize_int32_t(sbuf, &tinfo->sched_policy);
-		deserialize_int32_t(sbuf, &tinfo->sched_priority);
-		deserialize_str(sbuf, tinfo->name);
+		if (deserialize_str(sbuf, tinfo->node_id) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->allowable_deadline_misses) < 0 ||
+		    deserialize_int64_t(sbuf, &tinfo->cpu_affinity) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->deadline) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->runtime) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->release_time) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->period) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->sched_policy) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->sched_priority) < 0 ||
+		    deserialize_str(sbuf, tinfo->name) < 0) {
+			fprintf(stderr, "Failed to deserialize task_info fields\n");
+			free(tinfo);
+			free_task_list(sinfo->tasks);
+			sinfo->tasks = NULL;
+			return -1;
+		}
 
 		tinfo->next = sinfo->tasks;
 		sinfo->tasks = tinfo;
@@ -373,8 +452,14 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 #endif
 	}
 
-	deserialize_str(sbuf, workload_id);
-	deserialize_int64_t(sbuf, &hyperperiod_us);
+	if (deserialize_str(sbuf, workload_id) < 0 ||
+	    deserialize_int64_t(sbuf, &hyperperiod_us) < 0) {
+		fprintf(stderr, "Failed to deserialize workload info\n");
+		free_task_list(sinfo->tasks);
+		sinfo->tasks = NULL;
+		return -1;
+	}
+
 	printf("\n\nworkload: %s\n", workload_id);
 	printf("hyperperiod: %lu us\n", hyperperiod_us);
 
@@ -438,22 +523,31 @@ static int sync_timer(sd_bus *dbus, char *node_id, struct timespec *ts_ptr)
 	return 0;
 }
 
-static void init_trpc_schedinfo(const char *addr, int port,
+static int init_trpc_schedinfo(const char *addr, int port,
 				sd_bus **dbus_ret, sd_event **event_ret,
 				char *node_id)
 {
+	int retry_count = 0;
+	const int max_retries = 300; // 300 seconds timeout
+
 	// Initialze trpc channel and get schedule info with retry logic
-	while (1) {
+	while (retry_count < max_retries) {
 		if (init_trpc(addr, port, dbus_ret, event_ret) == 0) {
 			if (get_schedinfo(*dbus_ret, node_id) == 0) {
 				/* Successfully retrieved schedule info */
-				return;
+				printf("Successfully connected and retrieved schedule info (attempt %d)\n", retry_count + 1);
+				return 0;
 			}
 		}
 
 		/* failed to get schedule info, retrying */
-		usleep(100000);
+		retry_count++;
+		printf("Connection attempt %d/%d failed, retrying...\n", retry_count, max_retries);
+		usleep(1000000); // 1 second
 	}
+
+	fprintf(stderr, "Failed to connect to server after %d attempts\n", max_retries);
+	return -1;
 }
 
 static void remove_tt_node(struct time_trigger *tt_node) {
@@ -519,8 +613,10 @@ static int get_options(int argc, char *argv[])
 	return 0;
 }
 
-static void init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
+static int init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
 {
+	int success_count = 0;
+
 	LIST_INIT(lh_ptr);
 
 	for (struct task_info *ti = sched_info.tasks; ti; ti = ti->next) {
@@ -533,6 +629,11 @@ static void init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
 		}
 
 		tt_node = calloc(1, sizeof(struct time_trigger));
+		if (!tt_node) {
+			fprintf(stderr, "Failed to allocate memory for time_trigger\n");
+			continue;
+		}
+
 		memcpy(&tt_node->task, ti, sizeof(tt_node->task));
 
 		pid = get_pid_by_name(tt_node->task.name);
@@ -552,8 +653,21 @@ static void init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
 
 		LIST_INSERT_HEAD(lh_ptr, tt_node, entry);
 
-		bpf_add_pid(pid);
+		if (bpf_add_pid(pid) < 0) {
+			fprintf(stderr, "Failed to add PID %d to BPF monitoring\n", pid);
+			// Continue anyway, monitoring is not critical for basic operation
+		}
+
+		success_count++;
 	}
+
+	if (success_count == 0) {
+		fprintf(stderr, "No tasks were successfully initialized\n");
+		return -1;
+	}
+
+	printf("Successfully initialized %d tasks\n", success_count);
+	return 0;
 }
 
 static int start_tt_timer(struct listhead *lh_ptr)
@@ -622,25 +736,42 @@ int main(int argc, char *argv[])
 		set_schedattr(pid, prio, SCHED_FIFO);
 	}
 
+	// Setup signal handlers for graceful shutdown
+	setup_signal_handlers();
+
+	// Set global reference for cleanup
+	global_tt_list = &lh;
+
 	// Calibrate BPF ktime(CLOCK_MONOTONIC) offset to CLOCK_REALTIME
 	calibrate_bpf_ktime_offset();
 
 	// Initialze trpc channel and get schedule info
-	init_trpc_schedinfo(addr, port, &trpc_dbus, &trpc_event, node_id);
+	if (init_trpc_schedinfo(addr, port, &trpc_dbus, &trpc_event, node_id) < 0) {
+		fprintf(stderr, "Failed to initialize TRPC and get schedule info\n");
+		return EXIT_FAILURE;
+	}
 
 	// Activate BPF programs
 	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
 
 	// Initialize time_trigger linked list
-	init_time_trigger_list(&lh, node_id);
+	if (init_time_trigger_list(&lh, node_id) < 0) {
+		fprintf(stderr, "Failed to initialize time trigger list\n");
+		cleanup_resources();
+		return EXIT_FAILURE;
+	}
 
 	// Synchronize hrtimers across multiple nodes
 	if (enable_sync && sync_timer(trpc_dbus, node_id, &starttimer_ts) < 0) {
+		fprintf(stderr, "Failed to synchronize timers\n");
+		cleanup_resources();
 		return EXIT_FAILURE;
 	}
 
 	// Setup and start hrtimers for tasks
 	if (start_tt_timer(&lh) < 0) {
+		fprintf(stderr, "Failed to start timers\n");
+		cleanup_resources();
 		return EXIT_FAILURE;
 	}
 
@@ -659,19 +790,19 @@ int main(int argc, char *argv[])
 		printf("TT will wake up Process %s(%d) with duration %d us, release_time %d, allowable_deadline_misses: %d\n",
 				tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time, tt_p->task.allowable_deadline_misses);
 
-	// The process will wait forever until it receives a signal from the handler
-	while (1) {
+	// Main execution loop with graceful shutdown support
+	printf("Time Trigger started. Press Ctrl+C to stop gracefully.\n");
+	while (!shutdown_requested) {
 		pause();
 	}
 
-	LIST_FOREACH(tt_p, &lh, entry) {
-		bpf_del_pid(tt_p->task.pid);
-		remove_tt_node(tt_p);
-	}
+	printf("Shutdown requested, cleaning up resources...\n");
+	cleanup_resources();
 
 	if (settimer) {
 		timer_delete(tracetimer);
 	}
 
+	printf("Time Trigger shutdown completed.\n");
 	return EXIT_SUCCESS;
 }
