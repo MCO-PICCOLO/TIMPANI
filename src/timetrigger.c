@@ -56,6 +56,9 @@ static void cleanup_resources(void)
 		while (!LIST_EMPTY(global_tt_list)) {
 			tt_p = LIST_FIRST(global_tt_list);
 			bpf_del_pid(tt_p->task.pid);
+			if (tt_p->task.pidfd >= 0) {
+				close(tt_p->task.pidfd);
+			}
 			remove_tt_node(tt_p);
 		}
 	}
@@ -165,7 +168,11 @@ static void tt_timer(union sigval value) {
 			task->name, SIGNO_TT, task->pid, ts_ns(after), ( ts_diff(after, before) / NSEC_PER_USEC ));
 
 	// Send the signal to the target process
-	kill(task->pid, SIGNO_TT);
+	if (send_signal_pidfd(task->pidfd, SIGNO_TT) < 0) {
+		fprintf(stderr, "Failed to send signal via pidfd to %s (PID %d)\n",
+			task->name, task->pid);
+		// TODO: check if the process is still alive
+	}
 
 	tt_node->prev_timer = before;
 }
@@ -650,6 +657,15 @@ static int init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
 		set_schedattr(pid, priority, policy);
 
 		tt_node->task.pid = pid;
+
+		// Create pidfd for the task
+		tt_node->task.pidfd = create_pidfd(pid);
+		if (tt_node->task.pidfd < 0) {
+			fprintf(stderr, "Failed to create pidfd for task %s (PID %d)\n",
+				tt_node->task.name, pid);
+			free(tt_node);
+			continue;
+		}
 
 		LIST_INSERT_HEAD(lh_ptr, tt_node, entry);
 

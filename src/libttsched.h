@@ -30,6 +30,10 @@ void set_schedattr(pid_t pid, unsigned int priority, unsigned int policy);
 void get_process_name_by_pid(const int pid, char name[]);
 int get_pid_by_name(const char *name);
 
+int create_pidfd(pid_t pid);
+int send_signal_pidfd(int pidfd, int signal);
+int is_process_alive(int pidfd);
+
 #ifdef __cplusplus
 }
 #endif

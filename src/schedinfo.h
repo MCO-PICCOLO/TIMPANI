@@ -11,6 +11,7 @@ extern "C" {
 
 struct task_info {
 	uint32_t pid;
+	int pidfd;
 	char name[TINFO_NAME_MAX];
 	uint32_t sched_priority;
 	uint32_t sched_policy;
