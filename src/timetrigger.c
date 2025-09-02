@@ -10,6 +10,7 @@
 #include <time.h>
 #include <getopt.h>
 #include <sys/queue.h>
+#include <errno.h>
 
 #include "libtttrace.h"
 #include "libttsched.h"
@@ -732,6 +733,59 @@ static int start_tt_timer(struct listhead *lh_ptr)
 	return 0;
 }
 
+static int epoll_loop(struct listhead *lh_ptr)
+{
+	int efd;
+	efd = epoll_create1(0);
+	if (efd < 0) {
+		perror("epoll_create failed");
+		return -1;
+	}
+
+	struct time_trigger *tt_p;
+	LIST_FOREACH(tt_p, lh_ptr, entry) {
+		printf("TT will wake up Process %s(%d) with duration %d us, release_time %d, allowable_deadline_misses: %d\n",
+			tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time, tt_p->task.allowable_deadline_misses);
+
+		struct epoll_event event;
+		event.data.fd = tt_p->task.pidfd;
+		event.events = EPOLLIN;
+		if (epoll_ctl(efd, EPOLL_CTL_ADD, tt_p->task.pidfd, &event) < 0) {
+			perror("epoll_ctl failed");
+			close(efd);
+			return -1;
+		}
+	}
+
+	// Main execution loop with graceful shutdown support
+	printf("Time Trigger started. Press Ctrl+C to stop gracefully.\n");
+	while (!shutdown_requested) {
+		struct epoll_event events[1];
+		int count = epoll_wait(efd, events, 1, -1);
+		if (count < 0) {
+			if (errno == EINTR) {
+				// Ctrl+C pressed or a signal received
+				break;
+			}
+			perror("epoll_wait failed");
+			close(efd);
+			return -1;
+		}
+
+		LIST_FOREACH(tt_p, lh_ptr, entry) {
+			if (tt_p->task.pidfd == events[0].data.fd) {
+				// Handle task termination
+				printf("Task %s(%d) terminated\n",
+					tt_p->task.name, tt_p->task.pid);
+				epoll_ctl(efd, EPOLL_CTL_DEL, tt_p->task.pidfd, NULL);
+				// TODO: Recovery from task termination
+			}
+		}
+	}
+	close(efd);
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	struct listhead lh;
@@ -801,15 +855,10 @@ int main(int argc, char *argv[])
 	printf("tracer_on!!!: %ld\n", ts_ns(now));
 #endif
 
-	struct time_trigger *tt_p;
-	LIST_FOREACH(tt_p, &lh, entry)
-		printf("TT will wake up Process %s(%d) with duration %d us, release_time %d, allowable_deadline_misses: %d\n",
-				tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time, tt_p->task.allowable_deadline_misses);
-
-	// Main execution loop with graceful shutdown support
-	printf("Time Trigger started. Press Ctrl+C to stop gracefully.\n");
-	while (!shutdown_requested) {
-		pause();
+	if (epoll_loop(&lh) < 0) {
+		fprintf(stderr, "epoll_loop failed\n");
+		cleanup_resources();
+		return EXIT_FAILURE;
 	}
 
 	printf("Shutdown requested, cleaning up resources...\n");
