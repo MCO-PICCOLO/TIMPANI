@@ -33,6 +33,27 @@ struct time_trigger {
 	LIST_ENTRY(time_trigger) entry;
 };
 
+// Hyperperiod and workload management structure
+struct hyperperiod_manager {
+	char workload_id[64];
+	uint64_t hyperperiod_us;
+	uint64_t current_cycle;
+	uint64_t hyperperiod_start_time_us;
+
+	// Hyperperiod-based timing
+	timer_t hyperperiod_timer;
+	struct timespec hyperperiod_start_ts;
+
+	// Task execution tracking within hyperperiod
+	uint32_t tasks_in_hyperperiod;
+	struct time_trigger *tt_list;
+
+	// Statistics
+	uint64_t completed_cycles;
+	uint32_t total_deadline_misses;
+	uint32_t cycle_deadline_misses;
+} hp_manager;
+
 LIST_HEAD(listhead, time_trigger);
 
 // Forward declarations
@@ -41,6 +62,12 @@ static void remove_tt_node(struct time_trigger *tt_node);
 static void cleanup_resources(void);
 static void signal_handler(int signo);
 static void setup_signal_handlers(void);
+
+// Hyperperiod management functions
+static int init_hyperperiod_manager(const char *workload_id, uint64_t hyperperiod_us);
+static void hyperperiod_cycle_handler(union sigval value);
+static uint64_t get_hyperperiod_relative_time_us(void);
+static void log_hyperperiod_statistics(void);
 
 static volatile sig_atomic_t shutdown_requested = 0;
 static struct listhead *global_tt_list = NULL;
@@ -76,6 +103,12 @@ static void cleanup_resources(void)
 	if (trpc_event) {
 		sd_event_unref(trpc_event);
 		trpc_event = NULL;
+	}
+
+	// Clean up hyperperiod timer
+	if (hp_manager.hyperperiod_us > 0) {
+		timer_delete(hp_manager.hyperperiod_timer);
+		log_hyperperiod_statistics();
 	}
 
 	// Turn off BPF and tracing
@@ -123,10 +156,15 @@ static void tt_timer(union sigval value) {
 	struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
 	struct task_info *task = (struct task_info *)&tt_node->task;
 	struct timespec before, after;
+	uint64_t hyperperiod_position_us;
 
 	clock_gettime(clockid, &before);
-	write_trace_marker("%s: Timer expired: now: %lld, diff: %lld\n",
-			task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer));
+
+	// Calculate position within hyperperiod
+	hyperperiod_position_us = get_hyperperiod_relative_time_us();
+
+	write_trace_marker("%s: Timer expired: now: %lld, diff: %lld, hyperperiod_pos: %lu us\n",
+			task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer), hyperperiod_position_us);
 
 	// If a task has its own release time, do nanosleep
 	if (task->release_time) {
@@ -143,6 +181,8 @@ static void tt_timer(union sigval value) {
 		if (!tt_node->sigwait_enter) {
 			printf("!!! DEADLINE MISS: STILL OVERRUN %s(%d): deadline %lu !!!\n",
 				task->name, task->pid, deadline_ns);
+			hp_manager.total_deadline_misses++;
+			hp_manager.cycle_deadline_misses++;
 			report_dmiss(trpc_dbus, node_id, task->name);
 		// Check if this task meets the deadline
 		} else if (tt_node->sigwait_ts > deadline_ns) {
@@ -150,6 +190,8 @@ static void tt_timer(union sigval value) {
 				task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
 			write_trace_marker("%s: Deadline miss: %lu diff\n",
 				task->name, tt_node->sigwait_ts - deadline_ns);
+			hp_manager.total_deadline_misses++;
+			hp_manager.cycle_deadline_misses++;
 			report_dmiss(trpc_dbus, node_id, task->name);
 		// Check if this task is stuck at kernel sigwait syscall handler
 		} else if (tt_node->sigwait_ts == tt_node->sigwait_ts_prev) {
@@ -157,6 +199,8 @@ static void tt_timer(union sigval value) {
 				task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
 			write_trace_marker("%s: Deadline miss: %lu diff\n",
 				task->name, tt_node->sigwait_ts - deadline_ns);
+			hp_manager.total_deadline_misses++;
+			hp_manager.cycle_deadline_misses++;
 			report_dmiss(trpc_dbus, node_id, task->name);
 		}
 
@@ -471,6 +515,14 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 	printf("\n\nworkload: %s\n", workload_id);
 	printf("hyperperiod: %lu us\n", hyperperiod_us);
 
+	// Initialize hyperperiod manager with received information
+	if (init_hyperperiod_manager(workload_id, hyperperiod_us) < 0) {
+		fprintf(stderr, "Failed to initialize hyperperiod manager\n");
+		free_task_list(sinfo->tasks);
+		sinfo->tasks = NULL;
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -562,6 +614,92 @@ static void remove_tt_node(struct time_trigger *tt_node) {
 	timer_delete(tt_node->timer);
 	LIST_REMOVE(tt_node, entry);
 	free(tt_node);
+}
+
+// Hyperperiod management implementation
+static int init_hyperperiod_manager(const char *workload_id, uint64_t hyperperiod_us)
+{
+	strncpy(hp_manager.workload_id, workload_id, sizeof(hp_manager.workload_id) - 1);
+	hp_manager.hyperperiod_us = hyperperiod_us;
+	hp_manager.current_cycle = 0;
+	hp_manager.completed_cycles = 0;
+	hp_manager.total_deadline_misses = 0;
+	hp_manager.cycle_deadline_misses = 0;
+	hp_manager.tasks_in_hyperperiod = 0;
+
+	// Hyperperiod start time will be set when timers actually start
+	hp_manager.hyperperiod_start_time_us = 0;
+
+	printf("Hyperperiod Manager initialized:\n");
+	printf("  Workload ID: %s\n", hp_manager.workload_id);
+	printf("  Hyperperiod: %lu us (%.3f ms)\n",
+		hp_manager.hyperperiod_us, hp_manager.hyperperiod_us / 1000.0);
+	printf("  Start time will be set when timers start\n");
+
+	return 0;
+}
+
+static void hyperperiod_cycle_handler(union sigval value)
+{
+	struct timespec now;
+	uint64_t cycle_time_us;
+
+	clock_gettime(clockid, &now);
+	cycle_time_us = ts_us(now);
+
+	// Update cycle information
+	hp_manager.completed_cycles++;
+	hp_manager.current_cycle = (hp_manager.current_cycle + 1) %
+		((hp_manager.hyperperiod_us > 0) ? 1 : 1); // Will be used for multi-cycle tracking
+
+	write_trace_marker("Hyperperiod cycle %lu completed at %lu us, deadline misses in this cycle: %u\n",
+		hp_manager.completed_cycles, cycle_time_us, hp_manager.cycle_deadline_misses);
+
+#if HP_DEBUG
+	printf("Hyperperiod cycle %lu completed (total misses: %u, cycle misses: %u)\n",
+		hp_manager.completed_cycles, hp_manager.total_deadline_misses, hp_manager.cycle_deadline_misses);
+#endif
+
+	// Reset cycle-specific counters
+	hp_manager.cycle_deadline_misses = 0;
+
+	// Log statistics every 100 cycles
+	if (hp_manager.completed_cycles % 100 == 0) {
+		log_hyperperiod_statistics();
+	}
+}
+
+static uint64_t get_hyperperiod_relative_time_us(void)
+{
+	struct timespec now;
+	clock_gettime(clockid, &now);
+
+	uint64_t current_time_us = ts_us(now);
+
+	// If hyperperiod hasn't started yet, return 0
+	if (hp_manager.hyperperiod_start_time_us == 0) {
+		return 0;
+	}
+
+	uint64_t elapsed_us = current_time_us - hp_manager.hyperperiod_start_time_us;
+
+	// Return position within current hyperperiod
+	return elapsed_us % hp_manager.hyperperiod_us;
+}
+
+static void log_hyperperiod_statistics(void)
+{
+	double miss_rate = hp_manager.completed_cycles > 0 ?
+		(double)hp_manager.total_deadline_misses / hp_manager.completed_cycles : 0.0;
+
+	printf("\n=== Hyperperiod Statistics ===\n");
+	printf("Workload: %s\n", hp_manager.workload_id);
+	printf("Completed cycles: %lu\n", hp_manager.completed_cycles);
+	printf("Hyperperiod length: %lu us\n", hp_manager.hyperperiod_us);
+	printf("Total deadline misses: %u\n", hp_manager.total_deadline_misses);
+	printf("Miss rate per cycle: %.4f\n", miss_rate);
+	printf("Tasks in hyperperiod: %u\n", hp_manager.tasks_in_hyperperiod);
+	printf("==============================\n\n");
 }
 
 static int report_dmiss(sd_bus *dbus, char *node_id, const char *taskname)
@@ -675,6 +813,9 @@ static int init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
 			// Continue anyway, monitoring is not critical for basic operation
 		}
 
+		// Count tasks for hyperperiod management
+		hp_manager.tasks_in_hyperperiod++;
+
 		success_count++;
 	}
 
@@ -786,6 +927,56 @@ static int epoll_loop(struct listhead *lh_ptr)
 	return 0;
 }
 
+static int start_hyperperiod_timer(void)
+{
+	struct itimerspec its;
+	struct sigevent sev;
+
+	if (hp_manager.hyperperiod_us == 0) {
+		printf("Warning: Hyperperiod not set, skipping hyperperiod timer\n");
+		return 0;
+	}
+
+	// Set hyperperiod start time to match with task timers
+	hp_manager.hyperperiod_start_ts = starttimer_ts;
+	hp_manager.hyperperiod_start_time_us = ts_us(hp_manager.hyperperiod_start_ts);
+
+	printf("Hyperperiod start time set: %lu us\n", hp_manager.hyperperiod_start_time_us);
+
+	memset(&sev, 0, sizeof(sev));
+	memset(&its, 0, sizeof(its));
+
+	sev.sigev_notify = SIGEV_THREAD;
+	sev.sigev_notify_function = hyperperiod_cycle_handler;
+	sev.sigev_value.sival_ptr = &hp_manager;
+
+	// Set hyperperiod cycle interval
+	its.it_value.tv_sec = starttimer_ts.tv_sec + (hp_manager.hyperperiod_us / USEC_PER_SEC);
+	its.it_value.tv_nsec = starttimer_ts.tv_nsec + (hp_manager.hyperperiod_us % USEC_PER_SEC) * NSEC_PER_USEC;
+	if (its.it_value.tv_nsec >= NSEC_PER_SEC) {
+		its.it_value.tv_sec++;
+		its.it_value.tv_nsec -= NSEC_PER_SEC;
+	}
+
+	its.it_interval.tv_sec = hp_manager.hyperperiod_us / USEC_PER_SEC;
+	its.it_interval.tv_nsec = (hp_manager.hyperperiod_us % USEC_PER_SEC) * NSEC_PER_USEC;
+
+	printf("Starting hyperperiod timer: %lu us interval (%lds %ldns)\n",
+		hp_manager.hyperperiod_us, its.it_interval.tv_sec, its.it_interval.tv_nsec);
+
+	if (timer_create(clockid, &sev, &hp_manager.hyperperiod_timer)) {
+		perror("Failed to create hyperperiod timer");
+		return -1;
+	}
+
+	if (timer_settime(hp_manager.hyperperiod_timer, TIMER_ABSTIME, &its, NULL)) {
+		perror("Failed to start hyperperiod timer");
+		return -1;
+	}
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	struct listhead lh;
@@ -841,6 +1032,13 @@ int main(int argc, char *argv[])
 	// Setup and start hrtimers for tasks
 	if (start_tt_timer(&lh) < 0) {
 		fprintf(stderr, "Failed to start timers\n");
+		cleanup_resources();
+		return EXIT_FAILURE;
+	}
+
+	// Start hyperperiod monitoring timer
+	if (start_hyperperiod_timer() < 0) {
+		fprintf(stderr, "Failed to start hyperperiod timer\n");
 		cleanup_resources();
 		return EXIT_FAILURE;
 	}
