@@ -21,6 +21,7 @@ add_executable(test_schedinfo_service
     ../src/node_config.cpp
     ../src/global_scheduler.cpp
     ../src/scheduler_utils.cpp
+    ../src/hyperperiod_manager.cpp
 )
 
 # Link libraries
@@ -51,6 +52,7 @@ add_executable(test_dbus_server
     ../src/node_config.cpp
     ../src/global_scheduler.cpp
     ../src/scheduler_utils.cpp
+    ../src/hyperperiod_manager.cpp
 )
 
 # Link libraries for DBusServer test
