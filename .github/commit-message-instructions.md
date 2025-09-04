@@ -26,31 +26,3 @@
     2. Exclude anything unnecessary such as translation, and your entire response will be passed directly into git commit.
 
     3. Keep the subject line under 50 characters, and word-wrap each line in the body under 72 characters.
-
-# Examples
-
-- Example 1
-  ```
-  feat: Add user auth system
-
-  - Add JWT tokens for API auth
-  - Handle token refresh for long sessions
-  ```
-
-- Example 2
-  ```
-  fix: Resolve memory leak in worker pool
-
-  - Clean up idle connections
-  - Add timeout for stale workers
-  ```
-
-- Example 3
-  ```
-  ui: Add support for multi-trace loading
-
-  - This change introduces a new feature to support loading multiple
-    trace files simultaneously in the UI.
-  - The UI will now allow users to select multiple trace files and
-    process them as a single TAR archive.
-  ```
