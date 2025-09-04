@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,7 +8,9 @@
 #include <signal.h>
 #include <sched.h>
 #include <time.h>
+#include <getopt.h>
 #include <sys/queue.h>
+#include <errno.h>
 
 #include "libtttrace.h"
 #include "libttsched.h"
@@ -30,25 +33,117 @@ struct time_trigger {
 	LIST_ENTRY(time_trigger) entry;
 };
 
+// Hyperperiod and workload management structure
+struct hyperperiod_manager {
+	char workload_id[64];
+	uint64_t hyperperiod_us;
+	uint64_t current_cycle;
+	uint64_t hyperperiod_start_time_us;
+
+	// Hyperperiod-based timing
+	timer_t hyperperiod_timer;
+	struct timespec hyperperiod_start_ts;
+
+	// Task execution tracking within hyperperiod
+	uint32_t tasks_in_hyperperiod;
+	struct time_trigger *tt_list;
+
+	// Statistics
+	uint64_t completed_cycles;
+	uint32_t total_deadline_misses;
+	uint32_t cycle_deadline_misses;
+} hp_manager;
+
 LIST_HEAD(listhead, time_trigger);
 
-static struct sched_info sched_info;
-
-// libtrpc D-Bus variables
-static sd_event *trpc_event;
-static sd_bus *trpc_dbus;
-
+// Forward declarations
+static void free_task_list(struct task_info *tasks);
 static void remove_tt_node(struct time_trigger *tt_node);
-static int report_dmiss(sd_bus *dbus, int node_id, const char *taskname);
+static void cleanup_resources(void);
+static void signal_handler(int signo);
+static void setup_signal_handlers(void);
+
+// Hyperperiod management functions
+static int init_hyperperiod_manager(const char *workload_id, uint64_t hyperperiod_us);
+static void hyperperiod_cycle_handler(union sigval value);
+static uint64_t get_hyperperiod_relative_time_us(void);
+static void log_hyperperiod_statistics(void);
+
+static volatile sig_atomic_t shutdown_requested = 0;
+static struct listhead *global_tt_list = NULL;
+
+// Global sched_info and D-Bus variables
+static struct sched_info sched_info;
+static sd_event *trpc_event = NULL;
+static sd_bus *trpc_dbus = NULL;
+
+static void cleanup_resources(void)
+{
+	if (global_tt_list) {
+		struct time_trigger *tt_p;
+		while (!LIST_EMPTY(global_tt_list)) {
+			tt_p = LIST_FIRST(global_tt_list);
+			bpf_del_pid(tt_p->task.pid);
+			if (tt_p->task.pidfd >= 0) {
+				close(tt_p->task.pidfd);
+			}
+			remove_tt_node(tt_p);
+		}
+	}
+
+	// Clean up sched_info tasks
+	free_task_list(sched_info.tasks);
+	sched_info.tasks = NULL;
+
+	// Clean up D-Bus resources
+	if (trpc_dbus) {
+		sd_bus_unref(trpc_dbus);
+		trpc_dbus = NULL;
+	}
+	if (trpc_event) {
+		sd_event_unref(trpc_event);
+		trpc_event = NULL;
+	}
+
+	// Clean up hyperperiod timer
+	if (hp_manager.hyperperiod_us > 0) {
+		timer_delete(hp_manager.hyperperiod_timer);
+		log_hyperperiod_statistics();
+	}
+
+	// Turn off BPF and tracing
+	bpf_off();
+	tracer_off();
+}
+
+static void signal_handler(int signo)
+{
+	shutdown_requested = 1;
+	write_trace_marker("Shutdown signal received: %d\n", signo);
+}
+
+static void setup_signal_handlers(void)
+{
+	struct sigaction sa;
+
+	sa.sa_handler = signal_handler;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
+}
+
+static int report_dmiss(sd_bus *dbus, char *node_id, const char *taskname);
 
 // default option values
 int cpu = -1;
 int prio = -1;
 int port = 7777;
 const char *addr = "127.0.0.1";
-int node_id = 1;
+char node_id[TINFO_NODEID_MAX] = "1";
 int enable_sync;
-int enable_gnuplot;
+int enable_plot;
 clockid_t clockid = CLOCK_REALTIME;
 int traceduration = 3;		// trace during 3 seconds
 
@@ -61,10 +156,15 @@ static void tt_timer(union sigval value) {
 	struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
 	struct task_info *task = (struct task_info *)&tt_node->task;
 	struct timespec before, after;
+	uint64_t hyperperiod_position_us;
 
 	clock_gettime(clockid, &before);
-	write_trace_marker("%s: Timer expired: now: %lld, diff: %lld\n",
-			task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer));
+
+	// Calculate position within hyperperiod
+	hyperperiod_position_us = get_hyperperiod_relative_time_us();
+
+	write_trace_marker("%s: Timer expired: now: %lld, diff: %lld, hyperperiod_pos: %lu us\n",
+			task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer), hyperperiod_position_us);
 
 	// If a task has its own release time, do nanosleep
 	if (task->release_time) {
@@ -81,6 +181,8 @@ static void tt_timer(union sigval value) {
 		if (!tt_node->sigwait_enter) {
 			printf("!!! DEADLINE MISS: STILL OVERRUN %s(%d): deadline %lu !!!\n",
 				task->name, task->pid, deadline_ns);
+			hp_manager.total_deadline_misses++;
+			hp_manager.cycle_deadline_misses++;
 			report_dmiss(trpc_dbus, node_id, task->name);
 		// Check if this task meets the deadline
 		} else if (tt_node->sigwait_ts > deadline_ns) {
@@ -88,6 +190,8 @@ static void tt_timer(union sigval value) {
 				task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
 			write_trace_marker("%s: Deadline miss: %lu diff\n",
 				task->name, tt_node->sigwait_ts - deadline_ns);
+			hp_manager.total_deadline_misses++;
+			hp_manager.cycle_deadline_misses++;
 			report_dmiss(trpc_dbus, node_id, task->name);
 		// Check if this task is stuck at kernel sigwait syscall handler
 		} else if (tt_node->sigwait_ts == tt_node->sigwait_ts_prev) {
@@ -95,6 +199,8 @@ static void tt_timer(union sigval value) {
 				task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
 			write_trace_marker("%s: Deadline miss: %lu diff\n",
 				task->name, tt_node->sigwait_ts - deadline_ns);
+			hp_manager.total_deadline_misses++;
+			hp_manager.cycle_deadline_misses++;
 			report_dmiss(trpc_dbus, node_id, task->name);
 		}
 
@@ -107,7 +213,11 @@ static void tt_timer(union sigval value) {
 			task->name, SIGNO_TT, task->pid, ts_ns(after), ( ts_diff(after, before) / NSEC_PER_USEC ));
 
 	// Send the signal to the target process
-	kill(task->pid, SIGNO_TT);
+	if (send_signal_pidfd(task->pidfd, SIGNO_TT) < 0) {
+		fprintf(stderr, "Failed to send signal via pidfd to %s (PID %d)\n",
+			task->name, task->pid);
+		// TODO: check if the process is still alive
+	}
 
 	tt_node->prev_timer = before;
 }
@@ -217,9 +327,12 @@ static inline int sigwait_bpf_callback(void *ctx, void *data, size_t len) {}
 #endif
 
 #ifdef CONFIG_TRACE_BPF_EVENT
-#define GNUPLOT_TIME_DIV	100000	// divisor for gnuplot time axis unit: 100 us
+#define BPF_EVENT_TIME_DIV	1000	// divisor for time axis unit: 1 us
 
-static inline void write_gnuplot_data(struct schedstat_event *e, const char *tname)
+#define BPF_EVENT_NS_TO_UNIT(ns) \
+	(((ns) + (BPF_EVENT_TIME_DIV - 1)) / BPF_EVENT_TIME_DIV)
+
+static inline void write_plot_data(struct schedstat_event *e, const char *tname)
 {
 	static uint64_t ts_first;
 	static FILE *gpfile;
@@ -227,19 +340,19 @@ static inline void write_gnuplot_data(struct schedstat_event *e, const char *tna
 
 	if (traceduration == 0) {
 		/* trace timer expired */
-		enable_gnuplot = 0;
+		enable_plot = 0;
 		fclose(gpfile);
 		gpfile = NULL;
 		return;
 	}
 
 	if (ts_first == 0) {
-		char fname[32];
+		char fname[128];
 
-		snprintf(fname, sizeof(fname), "node%d.gpdata", node_id);
+		snprintf(fname, sizeof(fname), "%s.gpdata", node_id);
 		gpfile = fopen(fname, "w+");
 		if (gpfile == NULL) {
-			enable_gnuplot = 0;
+			enable_plot = 0;
 			return;
 		}
 
@@ -251,19 +364,22 @@ static inline void write_gnuplot_data(struct schedstat_event *e, const char *tna
 	ts_start = bpf_ktime_to_real(e->ts_start);
 	ts_stop = bpf_ktime_to_real(e->ts_stop);
 
+#if 0
+	// This is only necessary for gnuplot
         // subtract starttimer_ts from timestamps so that timestamps start at 0
 	ts_wakeup -= ts_first;
 	ts_start -= ts_first;
 	ts_stop -= ts_first;
+#endif
 
-        // scale ns unit upto predefined time unit in round up manner
-	ts_wakeup = (ts_wakeup + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
-	ts_start = (ts_start + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
-	ts_stop = (ts_stop + (GNUPLOT_TIME_DIV - 1)) / GNUPLOT_TIME_DIV;
+        // scale ns unit up to predefined time unit in round up manner
+	ts_wakeup = BPF_EVENT_NS_TO_UNIT(ts_wakeup);
+	ts_start = BPF_EVENT_NS_TO_UNIT(ts_start);
+	ts_stop = BPF_EVENT_NS_TO_UNIT(ts_stop);
 
 	// Column formatting:
 	// task event ignored resource priority activate start stop ignored
-	fprintf(gpfile, "%-16s 0 0 N%dC%d 0 %lu %lu %lu 0\n",
+	fprintf(gpfile, "%-16s 0 0 %s-C%d 0 %lu %lu %lu 0\n",
 		tname, node_id, e->cpu, ts_wakeup, ts_start, ts_stop);
 }
 
@@ -285,8 +401,8 @@ static int schedstat_bpf_callback(void *ctx, void *data, size_t len)
 		}
 	}
 
-	if (enable_gnuplot && tt_p != NULL) {
-		write_gnuplot_data(e, tt_p->task.name);
+	if (enable_plot && tt_p != NULL) {
+		write_plot_data(e, tt_p->task.name);
 	}
 
 	return 0;
@@ -312,7 +428,17 @@ static int init_trpc(const char *addr, int port, sd_bus **dbus_ret, sd_event **e
 		return ret;
 	}
 
-	return ret;
+	return 0;
+}
+
+static void free_task_list(struct task_info *tasks)
+{
+	struct task_info *current = tasks;
+	while (current) {
+		struct task_info *next = current->next;
+		free(current);
+		current = next;
+	}
 }
 
 static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
@@ -320,25 +446,17 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 	uint32_t i;
 	uint32_t cid_size;
 
-	// Unpack sched_info
-	deserialize_int32_t(sbuf, &sinfo->nr_tasks);
-	deserialize_int32_t(sbuf, &sinfo->pod_period);
-	deserialize_int32_t(sbuf, &sinfo->container_period);
-	deserialize_int64_t(sbuf, &sinfo->cpumask);
-	deserialize_int32_t(sbuf, &sinfo->container_rt_period);
-	deserialize_int32_t(sbuf, &sinfo->container_rt_runtime);
-	cid_size = sizeof(sinfo->container_id);
-	deserialize_blob(sbuf, sinfo->container_id, &cid_size);
+	uint64_t hyperperiod_us = 0;
+	char workload_id[64] = { 0 };
 
+	// Unpack sched_info
+	if (deserialize_int32_t(sbuf, &sinfo->nr_tasks) < 0) {
+		fprintf(stderr, "Failed to deserialize nr_tasks\n");
+		return -1;
+	}
 	sinfo->tasks = NULL;
 
 #if 0
-	printf("sinfo->container_id: %.*s\n", cid_size, sinfo->container_id);
-	printf("sinfo->container_rt_runtime: %u\n", sinfo->container_rt_runtime);
-	printf("sinfo->container_rt_period: %u\n", sinfo->container_rt_period);
-	printf("sinfo->cpumask: %"PRIx64"\n", sinfo->cpumask);
-	printf("sinfo->container_period: %u\n", sinfo->container_period);
-	printf("sinfo->pod_period: %u\n", sinfo->pod_period);
 	printf("sinfo->nr_tasks: %u\n", sinfo->nr_tasks);
 #endif
 
@@ -346,48 +464,76 @@ static int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo)
 	for (i = 0; i < sinfo->nr_tasks; i++) {
 		struct task_info *tinfo = malloc(sizeof(struct task_info));
 		if (tinfo == NULL) {
-			// out of memory
+			fprintf(stderr, "Failed to allocate memory for task_info\n");
+			free_task_list(sinfo->tasks);
+			sinfo->tasks = NULL;
 			return -1;
 		}
 
-		deserialize_int32_t(sbuf, &tinfo->node_id);
-		deserialize_int32_t(sbuf, &tinfo->allowable_deadline_misses);
-		deserialize_int32_t(sbuf, &tinfo->release_time);
-		deserialize_int32_t(sbuf, &tinfo->period);
-		deserialize_int32_t(sbuf, &tinfo->sched_policy);
-		deserialize_int32_t(sbuf, &tinfo->sched_priority);
-		deserialize_str(sbuf, tinfo->name);
-		deserialize_int32_t(sbuf, &tinfo->pid);
+		if (deserialize_str(sbuf, tinfo->node_id) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->allowable_deadline_misses) < 0 ||
+		    deserialize_int64_t(sbuf, &tinfo->cpu_affinity) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->deadline) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->runtime) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->release_time) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->period) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->sched_policy) < 0 ||
+		    deserialize_int32_t(sbuf, &tinfo->sched_priority) < 0 ||
+		    deserialize_str(sbuf, tinfo->name) < 0) {
+			fprintf(stderr, "Failed to deserialize task_info fields\n");
+			free(tinfo);
+			free_task_list(sinfo->tasks);
+			sinfo->tasks = NULL;
+			return -1;
+		}
 
 		tinfo->next = sinfo->tasks;
 		sinfo->tasks = tinfo;
 
-#if 0
-		printf("tinfo->pid: %u\n", tinfo->pid);
+#if 1
 		printf("tinfo->name: %s\n", tinfo->name);
 		printf("tinfo->sched_priority: %d\n", tinfo->sched_priority);
 		printf("tinfo->sched_policy: %d\n", tinfo->sched_policy);
 		printf("tinfo->period: %d\n", tinfo->period);
 		printf("tinfo->release_time: %d\n", tinfo->release_time);
+		printf("tinfo->runtime: %d\n", tinfo->release_time);
+		printf("tinfo->deadline: %d\n", tinfo->release_time);
+		printf("tinfo->cpu_affinity: 0x%lx\n", tinfo->cpu_affinity);
 		printf("tinfo->allowable_deadline_misses: %d\n", tinfo->allowable_deadline_misses);
-		printf("tinfo->node_id: %u\n", tinfo->node_id);
+		printf("tinfo->node_id: %s\n", tinfo->node_id);
 #endif
+	}
+
+	if (deserialize_str(sbuf, workload_id) < 0 ||
+	    deserialize_int64_t(sbuf, &hyperperiod_us) < 0) {
+		fprintf(stderr, "Failed to deserialize workload info\n");
+		free_task_list(sinfo->tasks);
+		sinfo->tasks = NULL;
+		return -1;
+	}
+
+	printf("\n\nworkload: %s\n", workload_id);
+	printf("hyperperiod: %lu us\n", hyperperiod_us);
+
+	// Initialize hyperperiod manager with received information
+	if (init_hyperperiod_manager(workload_id, hyperperiod_us) < 0) {
+		fprintf(stderr, "Failed to initialize hyperperiod manager\n");
+		free_task_list(sinfo->tasks);
+		sinfo->tasks = NULL;
+		return -1;
 	}
 
 	return 0;
 }
 
-static int get_schedinfo(sd_bus *dbus, int node_id)
+static int get_schedinfo(sd_bus *dbus, char *node_id)
 {
 	int ret;
 	void *buf = NULL;
 	size_t bufsize;
 	serial_buf_t *sbuf = NULL;
-	char node_str[4];
 
-	snprintf(node_str, sizeof(node_str), "%u", node_id);
-
-	ret = trpc_client_schedinfo(dbus, node_str, &buf, &bufsize);
+	ret = trpc_client_schedinfo(dbus, node_id, &buf, &bufsize);
 	if (ret < 0) {
 		return ret;
 	}
@@ -410,18 +556,15 @@ static int get_schedinfo(sd_bus *dbus, int node_id)
 	return 0;
 }
 
-static int sync_timer(sd_bus *dbus, int node_id, struct timespec *ts_ptr)
+static int sync_timer(sd_bus *dbus, char *node_id, struct timespec *ts_ptr)
 {
 	int ret;
 	int ack;
-	char node_str[4];
-
-	snprintf(node_str, sizeof(node_str), "%u", node_id);
 
 	printf("Sync");
 	fflush(stdout);
 	while (1) {
-		ret = trpc_client_sync(dbus, node_str, &ack, ts_ptr);
+		ret = trpc_client_sync(dbus, node_id, &ack, ts_ptr);
 		if (ret < 0) {
 			return ret;
 		}
@@ -440,20 +583,130 @@ static int sync_timer(sd_bus *dbus, int node_id, struct timespec *ts_ptr)
 	return 0;
 }
 
+static int init_trpc_schedinfo(const char *addr, int port,
+				sd_bus **dbus_ret, sd_event **event_ret,
+				char *node_id)
+{
+	int retry_count = 0;
+	const int max_retries = 300; // 300 seconds timeout
+
+	// Initialze trpc channel and get schedule info with retry logic
+	while (retry_count < max_retries) {
+		if (init_trpc(addr, port, dbus_ret, event_ret) == 0) {
+			if (get_schedinfo(*dbus_ret, node_id) == 0) {
+				/* Successfully retrieved schedule info */
+				printf("Successfully connected and retrieved schedule info (attempt %d)\n", retry_count + 1);
+				return 0;
+			}
+		}
+
+		/* failed to get schedule info, retrying */
+		retry_count++;
+		printf("Connection attempt %d/%d failed, retrying...\n", retry_count, max_retries);
+		usleep(1000000); // 1 second
+	}
+
+	fprintf(stderr, "Failed to connect to server after %d attempts\n", max_retries);
+	return -1;
+}
+
 static void remove_tt_node(struct time_trigger *tt_node) {
 	timer_delete(tt_node->timer);
 	LIST_REMOVE(tt_node, entry);
 	free(tt_node);
 }
 
-static int report_dmiss(sd_bus *dbus, int node_id, const char *taskname)
+// Hyperperiod management implementation
+static int init_hyperperiod_manager(const char *workload_id, uint64_t hyperperiod_us)
+{
+	strncpy(hp_manager.workload_id, workload_id, sizeof(hp_manager.workload_id) - 1);
+	hp_manager.hyperperiod_us = hyperperiod_us;
+	hp_manager.current_cycle = 0;
+	hp_manager.completed_cycles = 0;
+	hp_manager.total_deadline_misses = 0;
+	hp_manager.cycle_deadline_misses = 0;
+	hp_manager.tasks_in_hyperperiod = 0;
+
+	// Hyperperiod start time will be set when timers actually start
+	hp_manager.hyperperiod_start_time_us = 0;
+
+	printf("Hyperperiod Manager initialized:\n");
+	printf("  Workload ID: %s\n", hp_manager.workload_id);
+	printf("  Hyperperiod: %lu us (%.3f ms)\n",
+		hp_manager.hyperperiod_us, hp_manager.hyperperiod_us / 1000.0);
+	printf("  Start time will be set when timers start\n");
+
+	return 0;
+}
+
+static void hyperperiod_cycle_handler(union sigval value)
+{
+	struct timespec now;
+	uint64_t cycle_time_us;
+
+	clock_gettime(clockid, &now);
+	cycle_time_us = ts_us(now);
+
+	// Update cycle information
+	hp_manager.completed_cycles++;
+	hp_manager.current_cycle = (hp_manager.current_cycle + 1) %
+		((hp_manager.hyperperiod_us > 0) ? 1 : 1); // Will be used for multi-cycle tracking
+
+	write_trace_marker("Hyperperiod cycle %lu completed at %lu us, deadline misses in this cycle: %u\n",
+		hp_manager.completed_cycles, cycle_time_us, hp_manager.cycle_deadline_misses);
+
+#if HP_DEBUG
+	printf("Hyperperiod cycle %lu completed (total misses: %u, cycle misses: %u)\n",
+		hp_manager.completed_cycles, hp_manager.total_deadline_misses, hp_manager.cycle_deadline_misses);
+#endif
+
+	// Reset cycle-specific counters
+	hp_manager.cycle_deadline_misses = 0;
+
+	// Log statistics every 100 cycles
+	if (hp_manager.completed_cycles % 100 == 0) {
+		log_hyperperiod_statistics();
+	}
+}
+
+static uint64_t get_hyperperiod_relative_time_us(void)
+{
+	struct timespec now;
+	clock_gettime(clockid, &now);
+
+	uint64_t current_time_us = ts_us(now);
+
+	// If hyperperiod hasn't started yet, return 0
+	if (hp_manager.hyperperiod_start_time_us == 0) {
+		return 0;
+	}
+
+	uint64_t elapsed_us = current_time_us - hp_manager.hyperperiod_start_time_us;
+
+	// Return position within current hyperperiod
+	return elapsed_us % hp_manager.hyperperiod_us;
+}
+
+static void log_hyperperiod_statistics(void)
+{
+	double miss_rate = hp_manager.completed_cycles > 0 ?
+		(double)hp_manager.total_deadline_misses / hp_manager.completed_cycles : 0.0;
+
+	printf("\n=== Hyperperiod Statistics ===\n");
+	printf("Workload: %s\n", hp_manager.workload_id);
+	printf("Completed cycles: %lu\n", hp_manager.completed_cycles);
+	printf("Hyperperiod length: %lu us\n", hp_manager.hyperperiod_us);
+	printf("Total deadline misses: %u\n", hp_manager.total_deadline_misses);
+	printf("Miss rate per cycle: %.4f\n", miss_rate);
+	printf("Tasks in hyperperiod: %u\n", hp_manager.tasks_in_hyperperiod);
+	printf("==============================\n\n");
+}
+
+static int report_dmiss(sd_bus *dbus, char *node_id, const char *taskname)
 {
 	int ret;
-	char node_str[4];
 
-	snprintf(node_str, sizeof(node_str), "%u", node_id);
-
-	return trpc_client_dmiss(dbus, node_str, taskname);
+	return trpc_client_dmiss(dbus, node_id, taskname);
 }
 
 static int get_options(int argc, char *argv[])
@@ -475,13 +728,13 @@ static int get_options(int argc, char *argv[])
 			traceduration = atoi(optarg);
 			break;
 		case 'n':
-			node_id = atoi(optarg);
+			strncpy(node_id, optarg, sizeof(node_id) - 1);
 			break;
 		case 's':
 			enable_sync = 1;
 			break;
 		case 'g':
-			enable_gnuplot = 1;
+			enable_plot = 1;
 			break;
 		case 'h':
 		default:
@@ -491,9 +744,9 @@ static int get_options(int argc, char *argv[])
 					"  -P <prio>\tRT priority (1~99) for timetrigger\n"
 					"  -p <port>\tport to connect to\n"
 					"  -t <seconds>\ttrace duration in seconds\n"
-					"  -n <node id>\tNode ID number\n"
+					"  -n <node id>\tNode ID\n"
 					"  -s\tEnable timer synchronization across multiple nodes\n"
-					"  -g\tEnable saving gnuplot data file by using BPF (node<id>.gpdata)\n"
+					"  -g\tEnable saving plot data file by using BPF (<node id>.gpdata)\n"
 					"  -h\tshow this help\n",
 					argv[0]);
 			return -1;
@@ -506,20 +759,27 @@ static int get_options(int argc, char *argv[])
 	return 0;
 }
 
-static void init_time_trigger_list(struct listhead *lh_ptr, int node_id)
+static int init_time_trigger_list(struct listhead *lh_ptr, char *node_id)
 {
+	int success_count = 0;
+
 	LIST_INIT(lh_ptr);
 
 	for (struct task_info *ti = sched_info.tasks; ti; ti = ti->next) {
 		struct time_trigger *tt_node;
 		unsigned int pid, priority, policy;
 
-		if (node_id != ti->node_id) {
+		if (strcmp(node_id, ti->node_id) != 0) {
 			/* The task does not belong to this node. */
 			continue;
 		}
 
 		tt_node = calloc(1, sizeof(struct time_trigger));
+		if (!tt_node) {
+			fprintf(stderr, "Failed to allocate memory for time_trigger\n");
+			continue;
+		}
+
 		memcpy(&tt_node->task, ti, sizeof(tt_node->task));
 
 		pid = get_pid_by_name(tt_node->task.name);
@@ -528,6 +788,8 @@ static void init_time_trigger_list(struct listhead *lh_ptr, int node_id)
 			free(tt_node);
 			continue;
 		}
+
+		set_affinity(pid, tt_node->task.cpu_affinity);
 		priority = tt_node->task.sched_priority;
 		policy = tt_node->task.sched_policy;
 
@@ -535,10 +797,35 @@ static void init_time_trigger_list(struct listhead *lh_ptr, int node_id)
 
 		tt_node->task.pid = pid;
 
+		// Create pidfd for the task
+		tt_node->task.pidfd = create_pidfd(pid);
+		if (tt_node->task.pidfd < 0) {
+			fprintf(stderr, "Failed to create pidfd for task %s (PID %d)\n",
+				tt_node->task.name, pid);
+			free(tt_node);
+			continue;
+		}
+
 		LIST_INSERT_HEAD(lh_ptr, tt_node, entry);
 
-		bpf_add_pid(pid);
+		if (bpf_add_pid(pid) < 0) {
+			fprintf(stderr, "Failed to add PID %d to BPF monitoring\n", pid);
+			// Continue anyway, monitoring is not critical for basic operation
+		}
+
+		// Count tasks for hyperperiod management
+		hp_manager.tasks_in_hyperperiod++;
+
+		success_count++;
 	}
+
+	if (success_count == 0) {
+		fprintf(stderr, "No tasks were successfully initialized\n");
+		return -1;
+	}
+
+	printf("Successfully initialized %d tasks\n", success_count);
+	return 0;
 }
 
 static int start_tt_timer(struct listhead *lh_ptr)
@@ -587,9 +874,113 @@ static int start_tt_timer(struct listhead *lh_ptr)
 	return 0;
 }
 
+static int epoll_loop(struct listhead *lh_ptr)
+{
+	int efd;
+	efd = epoll_create1(0);
+	if (efd < 0) {
+		perror("epoll_create failed");
+		return -1;
+	}
+
+	struct time_trigger *tt_p;
+	LIST_FOREACH(tt_p, lh_ptr, entry) {
+		printf("TT will wake up Process %s(%d) with duration %d us, release_time %d, allowable_deadline_misses: %d\n",
+			tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time, tt_p->task.allowable_deadline_misses);
+
+		struct epoll_event event;
+		event.data.fd = tt_p->task.pidfd;
+		event.events = EPOLLIN;
+		if (epoll_ctl(efd, EPOLL_CTL_ADD, tt_p->task.pidfd, &event) < 0) {
+			perror("epoll_ctl failed");
+			close(efd);
+			return -1;
+		}
+	}
+
+	// Main execution loop with graceful shutdown support
+	printf("Time Trigger started. Press Ctrl+C to stop gracefully.\n");
+	while (!shutdown_requested) {
+		struct epoll_event events[1];
+		int count = epoll_wait(efd, events, 1, -1);
+		if (count < 0) {
+			if (errno == EINTR) {
+				// Ctrl+C pressed or a signal received
+				break;
+			}
+			perror("epoll_wait failed");
+			close(efd);
+			return -1;
+		}
+
+		LIST_FOREACH(tt_p, lh_ptr, entry) {
+			if (tt_p->task.pidfd == events[0].data.fd) {
+				// Handle task termination
+				printf("Task %s(%d) terminated\n",
+					tt_p->task.name, tt_p->task.pid);
+				epoll_ctl(efd, EPOLL_CTL_DEL, tt_p->task.pidfd, NULL);
+				// TODO: Recovery from task termination
+			}
+		}
+	}
+	close(efd);
+	return 0;
+}
+
+static int start_hyperperiod_timer(void)
+{
+	struct itimerspec its;
+	struct sigevent sev;
+
+	if (hp_manager.hyperperiod_us == 0) {
+		printf("Warning: Hyperperiod not set, skipping hyperperiod timer\n");
+		return 0;
+	}
+
+	// Set hyperperiod start time to match with task timers
+	hp_manager.hyperperiod_start_ts = starttimer_ts;
+	hp_manager.hyperperiod_start_time_us = ts_us(hp_manager.hyperperiod_start_ts);
+
+	printf("Hyperperiod start time set: %lu us\n", hp_manager.hyperperiod_start_time_us);
+
+	memset(&sev, 0, sizeof(sev));
+	memset(&its, 0, sizeof(its));
+
+	sev.sigev_notify = SIGEV_THREAD;
+	sev.sigev_notify_function = hyperperiod_cycle_handler;
+	sev.sigev_value.sival_ptr = &hp_manager;
+
+	// Set hyperperiod cycle interval
+	its.it_value.tv_sec = starttimer_ts.tv_sec + (hp_manager.hyperperiod_us / USEC_PER_SEC);
+	its.it_value.tv_nsec = starttimer_ts.tv_nsec + (hp_manager.hyperperiod_us % USEC_PER_SEC) * NSEC_PER_USEC;
+	if (its.it_value.tv_nsec >= NSEC_PER_SEC) {
+		its.it_value.tv_sec++;
+		its.it_value.tv_nsec -= NSEC_PER_SEC;
+	}
+
+	its.it_interval.tv_sec = hp_manager.hyperperiod_us / USEC_PER_SEC;
+	its.it_interval.tv_nsec = (hp_manager.hyperperiod_us % USEC_PER_SEC) * NSEC_PER_USEC;
+
+	printf("Starting hyperperiod timer: %lu us interval (%lds %ldns)\n",
+		hp_manager.hyperperiod_us, its.it_interval.tv_sec, its.it_interval.tv_nsec);
+
+	if (timer_create(clockid, &sev, &hp_manager.hyperperiod_timer)) {
+		perror("Failed to create hyperperiod timer");
+		return -1;
+	}
+
+	if (timer_settime(hp_manager.hyperperiod_timer, TIMER_ABSTIME, &its, NULL)) {
+		perror("Failed to start hyperperiod timer");
+		return -1;
+	}
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	struct listhead lh;
+	pid_t pid = getpid();
 
 	timer_t tracetimer;
 
@@ -600,22 +991,24 @@ int main(int argc, char *argv[])
 	}
 
 	if (cpu != -1) {
-		set_affinity(cpu);
+		set_affinity(pid, cpu);
 	}
 	if (prio > 0 && prio <= 99) {
-		set_schedattr(getpid(), prio, SCHED_FIFO);
+		set_schedattr(pid, prio, SCHED_FIFO);
 	}
+
+	// Setup signal handlers for graceful shutdown
+	setup_signal_handlers();
+
+	// Set global reference for cleanup
+	global_tt_list = &lh;
 
 	// Calibrate BPF ktime(CLOCK_MONOTONIC) offset to CLOCK_REALTIME
 	calibrate_bpf_ktime_offset();
 
-	// Initialze TRPC channel
-	if (init_trpc(addr, port, &trpc_dbus, &trpc_event) < 0) {
-		return EXIT_FAILURE;
-	}
-
-	// Get Schedule Info
-	if (get_schedinfo(trpc_dbus, node_id) < 0) {
+	// Initialze trpc channel and get schedule info
+	if (init_trpc_schedinfo(addr, port, &trpc_dbus, &trpc_event, node_id) < 0) {
+		fprintf(stderr, "Failed to initialize TRPC and get schedule info\n");
 		return EXIT_FAILURE;
 	}
 
@@ -623,15 +1016,30 @@ int main(int argc, char *argv[])
 	bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&lh);
 
 	// Initialize time_trigger linked list
-	init_time_trigger_list(&lh, node_id);
+	if (init_time_trigger_list(&lh, node_id) < 0) {
+		fprintf(stderr, "Failed to initialize time trigger list\n");
+		cleanup_resources();
+		return EXIT_FAILURE;
+	}
 
 	// Synchronize hrtimers across multiple nodes
 	if (enable_sync && sync_timer(trpc_dbus, node_id, &starttimer_ts) < 0) {
+		fprintf(stderr, "Failed to synchronize timers\n");
+		cleanup_resources();
 		return EXIT_FAILURE;
 	}
 
 	// Setup and start hrtimers for tasks
 	if (start_tt_timer(&lh) < 0) {
+		fprintf(stderr, "Failed to start timers\n");
+		cleanup_resources();
+		return EXIT_FAILURE;
+	}
+
+	// Start hyperperiod monitoring timer
+	if (start_hyperperiod_timer() < 0) {
+		fprintf(stderr, "Failed to start hyperperiod timer\n");
+		cleanup_resources();
 		return EXIT_FAILURE;
 	}
 
@@ -645,24 +1053,19 @@ int main(int argc, char *argv[])
 	printf("tracer_on!!!: %ld\n", ts_ns(now));
 #endif
 
-	struct time_trigger *tt_p;
-	LIST_FOREACH(tt_p, &lh, entry)
-		printf("TT will wake up Process %s(%d) with duration %d us, release_time %d, allowable_deadline_misses: %d\n",
-				tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time, tt_p->task.allowable_deadline_misses);
-
-	// The process will wait forever until it receives a signal from the handler
-	while (1) {
-		pause();
+	if (epoll_loop(&lh) < 0) {
+		fprintf(stderr, "epoll_loop failed\n");
+		cleanup_resources();
+		return EXIT_FAILURE;
 	}
 
-	LIST_FOREACH(tt_p, &lh, entry) {
-		bpf_del_pid(tt_p->task.pid);
-		remove_tt_node(tt_p);
-	}
+	printf("Shutdown requested, cleaning up resources...\n");
+	cleanup_resources();
 
 	if (settimer) {
 		timer_delete(tracetimer);
 	}
 
+	printf("Time Trigger shutdown completed.\n");
 	return EXIT_SUCCESS;
 }

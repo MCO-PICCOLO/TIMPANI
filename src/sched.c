@@ -8,18 +8,19 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/syscall.h>
+#include <signal.h>
 
 #include "libttsched.h"
 
 #define PROCESS_NAME_SIZE	16
 
-void set_affinity(int cpu) {
+void set_affinity(pid_t pid, int cpu) {
 	cpu_set_t cpuset;
 	CPU_ZERO(&cpuset);
 	CPU_SET(cpu, &cpuset);
 
-	// Set the current thread's (the main thread) CPU affinity mask
-	if (sched_setaffinity(0, sizeof(cpu_set_t), &cpuset) == -1) {
+	// Set pid's CPU affinity mask
+	if (sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset) == -1) {
 		perror("Error: sched_setaffinity");
 	}
 }
@@ -138,4 +139,45 @@ int get_pid_by_name(const char *name)
 	}
 	closedir(proc_dir);
 	return ret;
+}
+
+static int pidfd_open_tt(pid_t pid, unsigned int flags)
+{
+	return syscall(SYS_pidfd_open, pid, flags);
+}
+
+static int pidfd_send_signal_tt(int pidfd, int sig, siginfo_t *info, unsigned int flags)
+{
+	return syscall(SYS_pidfd_send_signal, pidfd, sig, info, flags);
+}
+
+int create_pidfd(pid_t pid)
+{
+	int pidfd = pidfd_open_tt(pid, 0);
+	if (pidfd < 0) {
+		perror("pidfd_open failed");
+		return -1;
+	}
+	return pidfd;
+}
+
+int send_signal_pidfd(int pidfd, int signal)
+{
+	int ret = pidfd_send_signal_tt(pidfd, signal, NULL, 0);
+	if (ret < 0) {
+		perror("pidfd_send_signal failed");
+		return ret;
+	}
+	return 0;
+}
+
+int is_process_alive(int pidfd)
+{
+	if (pidfd < 0) {
+		return 0;
+	}
+
+	// Try a null signal to check if process is alive
+	int ret = pidfd_send_signal_tt(pidfd, 0, NULL, 0);
+	return (ret == 0);
 }

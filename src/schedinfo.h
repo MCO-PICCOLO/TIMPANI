@@ -5,17 +5,23 @@
 extern "C" {
 #endif
 
+#define TINFO_NAME_MAX		16
+#define TINFO_NODEID_MAX	64
 #define SINFO_NODE_MAX		16
 
 struct task_info {
 	uint32_t pid;
-	char name[16];
+	int pidfd;
+	char name[TINFO_NAME_MAX];
 	uint32_t sched_priority;
 	uint32_t sched_policy;
 	uint32_t period;
 	uint32_t release_time;
+	uint32_t runtime;
+	uint32_t deadline;
+	uint64_t cpu_affinity;
 	uint32_t allowable_deadline_misses;
-	uint32_t node_id;
+	char node_id[TINFO_NODEID_MAX];
 	struct task_info *next;
 };
 
