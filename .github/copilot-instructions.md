@@ -13,6 +13,7 @@ Additionally, it provides a D-Bus peer-to-peer server that offers the following 
 - `src/`: Contains the main source code files for the `Timpani-O` program.
 - `proto/`: Contains Protocol Buffers definitions for gRPC communication with the workload orchestrator.
 - `cmake/`: Contains CMake modules for building the project.
+- `tests/`: Contains unit tests for testing the project.
 
 ## Libraries and Dependencies
 

@@ -29,7 +29,7 @@ Refer to [This README.md](http://mod.lge.com/hub/timpani/time-trigger/-/blob/mai
     sudo dnf install -y systemd-devel
     ```
 
-## Build
+## How to build
 
 ```
 git clone --recurse-submodules http://mod.lge.com/hub/timpani/timpani-o.git
@@ -38,6 +38,12 @@ mkdir build
 cd build
 cmake ..
 make
+```
+
+### Cross-compilation for ARM64
+
+```
+cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchain-aarch64-gcc.cmake ..
 ```
 
 ## Coding style
@@ -60,4 +66,40 @@ make
 - To run Timpani-O with specific options, refer to the help message:
   ```
   timpani-o -h
+  ```
+
+## Testing
+
+### Dependencies
+
+GoogleTest framework is required for testing.
+
+- On Ubuntu:
+  ```
+  sudo apt install -y libgtest-dev
+  ```
+- On CentOS:
+  ```
+  sudo dnf install -y gtest-devel
+  ```
+
+### Enable and run tests
+
+- To enable testing, configure the build with the following CMake option:
+  ```
+  cmake -DBUILD_TESTS=ON ..
+  ```
+
+- To run all tests:
+  ```
+  make test
+  ```
+
+- To run a specific unit test:
+  ```
+  ./tests/test_schedinfo_service
+  ./tests/test_dbus_server
+  ./tests/test_fault_client
+  ./tests/test_global_scheduler
+  ./tests/test_node_config
   ```

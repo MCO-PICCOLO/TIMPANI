@@ -1,10 +1,16 @@
 #ifndef SCHEDINFO_SERVICE_H
 #define SCHEDINFO_SERVICE_H
 
+#include <map>
+#include <memory>
+#include <shared_mutex>
 #include <thread>
 #include <grpcpp/grpcpp.h>
 
 #include "proto/schedinfo.grpc.pb.h"
+#include "node_config.h"  // Include NodeConfigManager
+#include "global_scheduler.h"  // Include GlobalScheduler
+#include "hyperperiod_manager.h"  // Include HyperperiodManager
 
 using grpc::Server;
 using grpc::ServerBuilder;
@@ -14,6 +20,10 @@ using schedinfo::v1::Response;
 using schedinfo::v1::SchedInfo;
 using schedinfo::v1::SchedInfoService;
 using schedinfo::v1::SchedPolicy;
+using schedinfo::v1::TaskInfo;
+
+using NodeSchedInfoMap = std::map<std::string, sched_info_t>;
+using SchedInfoMap = std::map<std::string, NodeSchedInfoMap>;
 
 /**
 * @brief Implementation of the SchedInfoService gRPC service
@@ -24,13 +34,42 @@ using schedinfo::v1::SchedPolicy;
 class SchedInfoServiceImpl final : public SchedInfoService::Service
 {
   public:
-    SchedInfoServiceImpl();
+    explicit SchedInfoServiceImpl(std::shared_ptr<NodeConfigManager> node_config_manager = nullptr);
 
-    Status AddSchedInfo(ServerContext *context, const SchedInfo *request,
-                        Response *reply) override;
+    Status AddSchedInfo(ServerContext* context, const SchedInfo* request,
+                        Response* reply) override;
+
+    SchedInfoMap GetSchedInfoMap() const;
+
+    /**
+     * @brief Get hyperperiod information for a specific workload
+     * @param workload_id The workload identifier
+     * @return Pointer to HyperperiodInfo or nullptr if not found
+     */
+    const HyperperiodInfo* GetHyperperiodInfo(const std::string& workload_id) const;
+
+    /**
+     * @brief Get all hyperperiod information
+     * @return Map of workload_id to HyperperiodInfo
+     */
+    const std::map<std::string, HyperperiodInfo>& GetAllHyperperiods() const;
 
   private:
-    static const char* SchedPolicyToStr(SchedPolicy policy);
+    static int SchedPolicyToInt(SchedPolicy policy);
+
+    // Convert gRPC TaskInfo to internal Task structure
+    std::vector<Task> ConvertTaskInfoToTasks(const SchedInfo* request);
+
+    // Member variable to store scheduling information
+    SchedInfoMap sched_info_map_;
+    // Use shared_mutex for sched_info_map_
+    mutable std::shared_mutex sched_info_mutex_;
+    // Node configuration manager
+    std::shared_ptr<NodeConfigManager> node_config_manager_;
+    // Global scheduler
+    std::shared_ptr<GlobalScheduler> global_scheduler_;
+    // Hyperperiod manager
+    std::shared_ptr<HyperperiodManager> hyperperiod_manager_;
 };
 
 /**
@@ -42,10 +81,26 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
 class SchedInfoServer
 {
   public:
-    SchedInfoServer();
+    explicit SchedInfoServer(std::shared_ptr<NodeConfigManager> node_config_manager = nullptr);
     ~SchedInfoServer();
     bool Start(int port);
     void Stop();
+    SchedInfoMap GetSchedInfoMap() const;
+    
+    /**
+     * @brief Get hyperperiod information for a specific workload
+     * @param workload_id The workload identifier
+     * @return Pointer to HyperperiodInfo or nullptr if not found
+     */
+    const HyperperiodInfo* GetHyperperiodInfo(const std::string& workload_id) const;
+
+    /**
+     * @brief Get all hyperperiod information
+     * @return Map of workload_id to HyperperiodInfo
+     */
+    const std::map<std::string, HyperperiodInfo>& GetAllHyperperiods() const;
+    
+    void DumpSchedInfo();
 
  private:
     SchedInfoServiceImpl service_;
