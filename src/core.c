@@ -32,6 +32,11 @@ static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts)
 
 int sigwait_bpf_callback(void *ctx, void *data, size_t len)
 {
+    // 매개변수 검증
+    if (!ctx || !data || len < sizeof(struct sigwait_event)) {
+        return -1;
+    }
+
     struct sigwait_event *e = (struct sigwait_event *)data;
     struct listhead *lh_p = (struct listhead *)ctx;
     struct time_trigger *tt_p;
@@ -55,6 +60,11 @@ int sigwait_bpf_callback(void *ctx, void *data, size_t len) { return 0; }
 #ifdef CONFIG_TRACE_BPF_EVENT
 int schedstat_bpf_callback(void *ctx, void *data, size_t len)
 {
+    // 매개변수 검증
+    if (!ctx || !data || len == 0) {
+        return -1;
+    }
+
     // BPF 이벤트 콜백 구현
     return 0;
 }
@@ -71,6 +81,12 @@ void calibrate_bpf_ktime_offset(void)
 void timer_handler(union sigval value)
 {
     struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
+
+    // 매개변수 검증
+    if (!tt_node || !tt_node->ctx) {
+        return;
+    }
+
     struct task_info *task = (struct task_info *)&tt_node->task;
     struct context *ctx = tt_node->ctx;  // context 가져오기
     struct timespec before, after;

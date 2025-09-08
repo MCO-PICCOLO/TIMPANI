@@ -13,6 +13,7 @@
 #include <getopt.h>
 #include <sys/queue.h>
 #include <errno.h>
+#include <sys/time.h>
 
 #include "timetrigger.h"
 #include "schedinfo.h"
@@ -38,6 +39,21 @@ typedef enum {
     TT_ERROR_CONFIG = -5,
     TT_ERROR_BPF = -6
 } tt_error_t;
+
+// 에러 메시지 함수
+static inline const char* tt_error_string(tt_error_t error)
+{
+    switch (error) {
+        case TT_SUCCESS: return "Success";
+        case TT_ERROR_MEMORY: return "Memory allocation failed";
+        case TT_ERROR_TIMER: return "Timer operation failed";
+        case TT_ERROR_SIGNAL: return "Signal handling failed";
+        case TT_ERROR_NETWORK: return "Network operation failed";
+        case TT_ERROR_CONFIG: return "Configuration error";
+        case TT_ERROR_BPF: return "BPF operation failed";
+        default: return "Unknown error";
+    }
+}
 
 // 시그널 정의
 #define SIGNO_TT            __SIGRTMIN+2

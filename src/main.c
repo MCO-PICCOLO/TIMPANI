@@ -12,17 +12,22 @@ int main(int argc, char *argv[])
     // 설정 파싱
     ret = config_parse(argc, argv, &ctx);
     if (ret != TT_SUCCESS) {
+        fprintf(stderr, "Configuration error: %s\n", tt_error_string(ret));
         return EXIT_FAILURE;
     }
 
     // 초기화
     ret = initialize(&ctx);
     if (ret != TT_SUCCESS) {
+        fprintf(stderr, "Initialization failed: %s\n", tt_error_string(ret));
         goto cleanup;
     }
 
     // 실행
     ret = run(&ctx);
+    if (ret != TT_SUCCESS) {
+        fprintf(stderr, "Runtime error: %s\n", tt_error_string(ret));
+    }
 
 cleanup:
     cleanup_all(&ctx);

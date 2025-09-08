@@ -21,10 +21,18 @@ void cleanup_all(struct context *ctx)
 
 static void cleanup_tasks(struct context *ctx)
 {
+    if (!ctx) {
+        return;
+    }
+
     struct time_trigger *tt_p;
 
     while (!LIST_EMPTY(&ctx->runtime.tt_list)) {
         tt_p = LIST_FIRST(&ctx->runtime.tt_list);
+
+        if (!tt_p) {
+            break;  // 안전장치
+        }
 
         // BPF에서 PID 제거
         bpf_del_pid(tt_p->task.pid);

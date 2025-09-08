@@ -3,11 +3,16 @@
 // 기본값 설정
 static void config_set_defaults(struct context *ctx)
 {
+    if (!ctx) {
+        return;
+    }
+
     ctx->config.cpu = -1;
     ctx->config.prio = -1;
     ctx->config.port = 7777;
     ctx->config.addr = "127.0.0.1";
-    strcpy(ctx->config.node_id, "1");
+    strncpy(ctx->config.node_id, "1", sizeof(ctx->config.node_id) - 1);
+    ctx->config.node_id[sizeof(ctx->config.node_id) - 1] = '\0';
     ctx->config.enable_sync = false;
     ctx->config.enable_plot = false;
     ctx->config.clockid = CLOCK_REALTIME;
@@ -50,6 +55,7 @@ tt_error_t config_parse(int argc, char *argv[], struct context *ctx)
             break;
         case 'n':
             strncpy(ctx->config.node_id, optarg, sizeof(ctx->config.node_id) - 1);
+            ctx->config.node_id[sizeof(ctx->config.node_id) - 1] = '\0';
             break;
         case 's':
             ctx->config.enable_sync = true;
