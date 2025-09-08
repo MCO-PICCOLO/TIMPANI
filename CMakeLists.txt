@@ -96,7 +96,19 @@ install(TARGETS ttsched
 )
 
 # timetrigger test program
-add_executable(timetrigger src/timetrigger.c)
+set(TIMETRIGGER_SOURCES
+	src/main.c
+	src/core.c
+	src/hyperperiod.c
+	src/task.c
+	src/config.c
+	src/trpc.c
+	src/signal.c
+	src/cleanup.c
+	src/globals.c
+)
+
+add_executable(timetrigger ${TIMETRIGGER_SOURCES})
 target_link_libraries(timetrigger
 		tttrace
 		ttsched

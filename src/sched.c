@@ -9,20 +9,40 @@
 #include <dirent.h>
 #include <sys/syscall.h>
 #include <signal.h>
+#include <errno.h>
 
 #include "libttsched.h"
 
 #define PROCESS_NAME_SIZE	16
 
-void set_affinity(pid_t pid, int cpu) {
+int set_affinity(pid_t pid, int cpu) {
 	cpu_set_t cpuset;
+	int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+
+	if (num_cpus < 0) {
+		fprintf(stderr, "Error: Failed to get number of CPUs: %s\n", strerror(errno));
+		return -1;
+	}
+
+	// Validate CPU number
+	if (cpu < 0 || cpu >= num_cpus) {
+		fprintf(stderr, "Warning: Invalid CPU %d (available: 0-%d), setting to CPU 0\n",
+			cpu, num_cpus - 1);
+		cpu = 0; // Fallback to CPU 0
+	}
+
 	CPU_ZERO(&cpuset);
 	CPU_SET(cpu, &cpuset);
 
 	// Set pid's CPU affinity mask
 	if (sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset) == -1) {
-		perror("Error: sched_setaffinity");
+		fprintf(stderr, "Error: sched_setaffinity failed for PID %d with CPU %d: %s\n",
+			pid, cpu, strerror(errno));
+		return -1;
 	}
+
+	printf("Info: Successfully set CPU affinity for PID %d to CPU %d\n", pid, cpu);
+	return 0;
 }
 
 static int sched_setattr_tt(pid_t pid, const struct sched_attr_tt *attr,

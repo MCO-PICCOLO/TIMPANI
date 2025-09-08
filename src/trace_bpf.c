@@ -163,18 +163,20 @@ int bpf_on(ring_buffer_sample_fn sigwait_cb,
 
 	ret = start_sigwait_bpf(sigwait_cb, ctx);
 	if (ret < 0) {
-		goto fail;
+		fprintf(stderr, "Warning: Failed to initialize BPF tracepoints - continuing without BPF monitoring\n");
+		fprintf(stderr, "Info: This is normal on kernels without required tracepoint support\n");
+		return 0;  // Return success to allow application to continue
 	}
 
 #ifdef CONFIG_TRACE_BPF_EVENT
 	ret = start_schedstat_bpf(schedstat_cb, ctx);
 	if (ret < 0) {
-		goto fail;
+		fprintf(stderr, "Warning: Failed to initialize BPF schedstat monitoring - continuing without schedstat\n");
+		// Don't fail completely, sigwait BPF is more important
 	}
 #endif
 
-fail:
-	return ret;
+	return 0;  // Always return success for graceful degradation
 }
 
 void bpf_off(void)
@@ -213,20 +215,22 @@ int bpf_add_pid(int pid)
 	uint8_t value = 1;
 
 	// Check if sigwait BPF feature is initialized
-	if (!sigwait_bpf) return -1;
+	if (!sigwait_bpf) {
+		// BPF not available, return success for graceful degradation
+		return 0;
+	}
 
 	if (bpf_map_update_elem(bpf_map__fd(sigwait_bpf->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
-		fprintf(stderr, "Error adding PID %d to pid_filter_map\n", pid);
-		return -1;
+		fprintf(stderr, "Warning: Failed to add PID %d to BPF pid_filter_map\n", pid);
+		return 0;  // Don't fail the application
 	}
 
 #ifdef CONFIG_TRACE_BPF_EVENT
 	// Check if schedstat BPF feature is initialized
-	if (!schedstat_bpf) return -1;
-
-	if (bpf_map_update_elem(bpf_map__fd(schedstat_bpf->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
-		fprintf(stderr, "Error adding PID %d to pid_filter_map\n", pid);
-		return -1;
+	if (schedstat_bpf) {
+		if (bpf_map_update_elem(bpf_map__fd(schedstat_bpf->maps.pid_filter_map), &pid, &value, BPF_ANY)) {
+			fprintf(stderr, "Warning: Failed to add PID %d to schedstat pid_filter_map\n", pid);
+		}
 	}
 #endif
 
@@ -236,20 +240,22 @@ int bpf_add_pid(int pid)
 int bpf_del_pid(int pid)
 {
 	// Check if sigwait BPF feature is initialized
-	if (!sigwait_bpf) return -1;
+	if (!sigwait_bpf) {
+		// BPF not available, return success for graceful degradation
+		return 0;
+	}
 
 	if (bpf_map_delete_elem(bpf_map__fd(sigwait_bpf->maps.pid_filter_map), &pid)) {
-		fprintf(stderr, "Error deleting PID %d from pid_filter_map\n", pid);
-		return -1;
+		fprintf(stderr, "Warning: Failed to delete PID %d from BPF pid_filter_map\n", pid);
+		return 0;  // Don't fail the application
 	}
 
 #ifdef CONFIG_TRACE_BPF_EVENT
 	// Check if schedstat BPF feature is initialized
-	if (!schedstat_bpf) return -1;
-
-	if (bpf_map_delete_elem(bpf_map__fd(schedstat_bpf->maps.pid_filter_map), &pid)) {
-		fprintf(stderr, "Error deleting PID %d from pid_filter_map\n", pid);
-		return -1;
+	if (schedstat_bpf) {
+		if (bpf_map_delete_elem(bpf_map__fd(schedstat_bpf->maps.pid_filter_map), &pid)) {
+			fprintf(stderr, "Warning: Failed to delete PID %d from schedstat pid_filter_map\n", pid);
+		}
 	}
 #endif
 
