@@ -105,7 +105,6 @@ set(TIMETRIGGER_SOURCES
 	src/trpc.c
 	src/signal.c
 	src/cleanup.c
-	src/globals.c
 )
 
 add_executable(timetrigger ${TIMETRIGGER_SOURCES})

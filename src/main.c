@@ -91,7 +91,7 @@ static tt_error_t run(struct context *ctx)
     }
 
     // 트레이싱 설정 및 활성화
-    settimer = set_stoptracer_timer(ctx->config.traceduration, &tracetimer);
+    settimer = set_stoptracer_timer(ctx, ctx->config.traceduration, &tracetimer);
     tracer_on();
 
 #if defined(CONFIG_TRACE_EVENT) || defined(CONFIG_TRACE_BPF_EVENT)

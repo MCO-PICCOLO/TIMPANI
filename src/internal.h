@@ -79,6 +79,9 @@ struct hyperperiod_manager {
     uint64_t completed_cycles;
     uint32_t total_deadline_misses;
     uint32_t cycle_deadline_misses;
+
+    // Context reference for accessing configuration
+    struct context *ctx;
 };
 
 LIST_HEAD(listhead, time_trigger);
@@ -129,7 +132,7 @@ int sigwait_bpf_callback(void *ctx, void *data, size_t len);
 int schedstat_bpf_callback(void *ctx, void *data, size_t len);
 
 // hyperperiod.c
-tt_error_t hyperperiod_init(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us);
+tt_error_t hyperperiod_init(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx);
 void hyperperiod_cycle_handler(union sigval value);
 uint64_t hyperperiod_get_relative_time_us(const struct hyperperiod_manager *hp_mgr);
 void hyperperiod_log_statistics(const struct hyperperiod_manager *hp_mgr);
@@ -153,6 +156,6 @@ void cleanup_all(struct context *ctx);
 
 // 유틸리티 함수들
 void calibrate_bpf_ktime_offset(void);
-bool set_stoptracer_timer(int duration, timer_t *timer);
+bool set_stoptracer_timer(struct context *ctx, int duration, timer_t *timer);
 
 #endif /* _INTERNAL_H */

@@ -1,11 +1,5 @@
 #include "internal.h"
 
-// 전역 변수들 (리팩토링 후 제거 예정)
-extern struct hyperperiod_manager hp_manager;
-extern sd_bus *trpc_dbus;
-extern char node_id[TINFO_NODEID_MAX];
-extern clockid_t clockid;
-
 // BPF 콜백 함수들
 #ifdef CONFIG_TRACE_BPF
 static uint64_t bpf_ktime_off;
@@ -255,7 +249,7 @@ static void sighan_stoptracer(int signo, siginfo_t *info, void *context)
     signal(signo, SIG_IGN);
 }
 
-bool set_stoptracer_timer(int duration, timer_t *timer)
+bool set_stoptracer_timer(struct context *ctx, int duration, timer_t *timer)
 {
     struct sigevent sev = {};
     struct itimerspec its = {};
@@ -271,14 +265,13 @@ bool set_stoptracer_timer(int duration, timer_t *timer)
     sev.sigev_notify = SIGEV_SIGNAL;
     sev.sigev_signo = SIGNO_STOPTRACER;
 
-    // 임시로 전역 변수 사용 (나중에 context로 변경)
-    extern struct timespec starttimer_ts;
-    its.it_value.tv_sec = starttimer_ts.tv_sec + duration;
-    its.it_value.tv_nsec = starttimer_ts.tv_nsec;
+    // context를 통해 starttimer_ts에 접근
+    its.it_value.tv_sec = ctx->runtime.starttimer_ts.tv_sec + duration;
+    its.it_value.tv_nsec = ctx->runtime.starttimer_ts.tv_nsec;
     its.it_interval.tv_sec = duration;
     its.it_interval.tv_nsec = 0;
 
-    if (timer_create(CLOCK_REALTIME, &sev, timer) == -1) {
+    if (timer_create(ctx->config.clockid, &sev, timer) == -1) {
         perror("Failed to create timer");
         return false;
     }
@@ -291,7 +284,7 @@ bool set_stoptracer_timer(int duration, timer_t *timer)
     return true;
 }
 #else
-bool set_stoptracer_timer(int duration, timer_t *timer)
+bool set_stoptracer_timer(struct context *ctx, int duration, timer_t *timer)
 {
     return false;
 }

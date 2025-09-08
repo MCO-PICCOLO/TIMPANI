@@ -113,7 +113,7 @@ int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo, struct c
     printf("Hyperperiod: %lu us\n", hyperperiod_us);
 
     // context의 hp_manager에 초기화 (수정된 부분)
-    if (hyperperiod_init(&ctx->hp_manager, workload_id, hyperperiod_us) != TT_SUCCESS) {
+    if (hyperperiod_init(&ctx->hp_manager, workload_id, hyperperiod_us, ctx) != TT_SUCCESS) {
         fprintf(stderr, "Failed to initialize hyperperiod manager\n");
         free_task_list(sinfo->tasks);
         sinfo->tasks = NULL;

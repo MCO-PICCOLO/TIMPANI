@@ -1,11 +1,8 @@
 #include "internal.h"
 
-// 임시 전역 변수 (나중에 제거 예정)
-extern clockid_t clockid;
-
-tt_error_t hyperperiod_init(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us)
+tt_error_t hyperperiod_init(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx)
 {
-    if (!hp_mgr || !workload_id) {
+    if (!hp_mgr || !workload_id || !ctx) {
         return TT_ERROR_CONFIG;
     }
 
@@ -16,6 +13,7 @@ tt_error_t hyperperiod_init(struct hyperperiod_manager *hp_mgr, const char *work
     hp_mgr->total_deadline_misses = 0;
     hp_mgr->cycle_deadline_misses = 0;
     hp_mgr->tasks_in_hyperperiod = 0;
+    hp_mgr->ctx = ctx;  // Context 포인터 설정
 
     // Hyperperiod start time will be set when timers actually start
     hp_mgr->hyperperiod_start_time_us = 0;
@@ -35,7 +33,7 @@ void hyperperiod_cycle_handler(union sigval value)
     struct timespec now;
     uint64_t cycle_time_us;
 
-    clock_gettime(clockid, &now);
+    clock_gettime(hp_mgr->ctx->config.clockid, &now);
     cycle_time_us = ts_us(now);
 
     // Update cycle information
@@ -63,7 +61,7 @@ void hyperperiod_cycle_handler(union sigval value)
 uint64_t hyperperiod_get_relative_time_us(const struct hyperperiod_manager *hp_mgr)
 {
     struct timespec now;
-    clock_gettime(clockid, &now);
+    clock_gettime(hp_mgr->ctx->config.clockid, &now);
 
     uint64_t current_time_us = ts_us(now);
 
