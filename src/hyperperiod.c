@@ -61,19 +61,25 @@ void hyperperiod_cycle_handler(union sigval value)
 uint64_t hyperperiod_get_relative_time_us(const struct hyperperiod_manager *hp_mgr)
 {
     struct timespec now;
-    clock_gettime(hp_mgr->ctx->config.clockid, &now);
 
-    uint64_t current_time_us = ts_us(now);
-
-    // If hyperperiod hasn't started yet, return 0
-    if (hp_mgr->hyperperiod_start_time_us == 0) {
+    // 빠른 NULL 검사
+    if (unlikely(!hp_mgr || hp_mgr->hyperperiod_start_time_us == 0)) {
         return 0;
     }
 
+    clock_gettime(hp_mgr->ctx->config.clockid, &now);
+    uint64_t current_time_us = fast_ts_us(&now);
+
     uint64_t elapsed_us = current_time_us - hp_mgr->hyperperiod_start_time_us;
 
-    // Return position within current hyperperiod
-    return elapsed_us % hp_mgr->hyperperiod_us;
+    // 비트 연산으로 모듈로 연산 최적화 (2의 거듭제곱일 때)
+    if (hp_mgr->hyperperiod_us & (hp_mgr->hyperperiod_us - 1)) {
+        // 일반적인 모듈로 연산
+        return elapsed_us % hp_mgr->hyperperiod_us;
+    } else {
+        // 2의 거듭제곱인 경우 비트 마스크 사용
+        return elapsed_us & (hp_mgr->hyperperiod_us - 1);
+    }
 }
 
 void hyperperiod_log_statistics(const struct hyperperiod_manager *hp_mgr)

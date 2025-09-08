@@ -29,6 +29,14 @@
 #define MAX_CONNECTION_RETRIES    300
 #define STATISTICS_LOG_INTERVAL   100
 
+// 컴파일러 힌트 매크로
+#ifndef likely
+#define likely(x)   __builtin_expect(!!(x), 1)
+#endif
+#ifndef unlikely
+#define unlikely(x) __builtin_expect(!!(x), 0)
+#endif
+
 // 에러 코드
 typedef enum {
     TT_SUCCESS = 0,
@@ -55,6 +63,32 @@ static inline const char* tt_error_string(tt_error_t error)
     }
 }
 
+// 성능 최적화 인라인 함수들
+static inline uint64_t fast_ts_ns(const struct timespec *ts)
+{
+    return ((uint64_t)ts->tv_sec * NSEC_PER_SEC) + ts->tv_nsec;
+}
+
+static inline uint64_t fast_ts_us(const struct timespec *ts)
+{
+    return ((uint64_t)ts->tv_sec * USEC_PER_SEC) + (ts->tv_nsec / NSEC_PER_USEC);
+}
+
+static inline void fast_timespec_add_us(struct timespec *ts, uint64_t us)
+{
+    uint64_t total_ns = fast_ts_ns(ts) + (us * NSEC_PER_USEC);
+    ts->tv_sec = total_ns / NSEC_PER_SEC;
+    ts->tv_nsec = total_ns % NSEC_PER_SEC;
+}
+
+static inline int fast_timespec_cmp(const struct timespec *a, const struct timespec *b)
+{
+    if (a->tv_sec != b->tv_sec) {
+        return (a->tv_sec > b->tv_sec) ? 1 : -1;
+    }
+    return (a->tv_nsec > b->tv_nsec) ? 1 : ((a->tv_nsec < b->tv_nsec) ? -1 : 0);
+}
+
 // 시그널 정의
 #define SIGNO_TT            __SIGRTMIN+2
 #define SIGNO_STOPTRACER    __SIGRTMIN+3
@@ -76,29 +110,31 @@ struct time_trigger {
     LIST_ENTRY(time_trigger) entry;
 };
 
-// Hyperperiod 관리 구조체
+// Hyperperiod 관리 구조체 (메모리 정렬 최적화)
 struct hyperperiod_manager {
-    char workload_id[64];
+    // 자주 접근하는 필드들을 앞으로
     uint64_t hyperperiod_us;
     uint64_t current_cycle;
     uint64_t hyperperiod_start_time_us;
+    uint64_t completed_cycles;
 
-    // Hyperperiod-based timing
+    // 포인터들
+    struct time_trigger *tt_list;
+    struct context *ctx;
+
+    // 타이머 관련
     timer_t hyperperiod_timer;
     struct timespec hyperperiod_start_ts;
 
-    // Task execution tracking within hyperperiod
+    // 통계 (32비트)
     uint32_t tasks_in_hyperperiod;
-    struct time_trigger *tt_list;
-
-    // Statistics
-    uint64_t completed_cycles;
     uint32_t total_deadline_misses;
     uint32_t cycle_deadline_misses;
+    uint32_t _padding;  // 8바이트 정렬을 위한 패딩
 
-    // Context reference for accessing configuration
-    struct context *ctx;
-};
+    // 문자열 (마지막에 배치)
+    char workload_id[64];
+} __attribute__((packed, aligned(8)));
 
 LIST_HEAD(listhead, time_trigger);
 

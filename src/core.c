@@ -8,19 +8,20 @@ static void calibrate_bpf_ktime_offset_internal(void)
 {
     int i;
     struct timespec t1, t2, t3;
-    uint64_t best_delta = 0, delta, ts;
+    uint64_t best_delta = UINT64_MAX, delta, ts;
 
-    for (i = 0; i < 10; i++) {
+    // 더 정확한 보정을 위해 반복 횟수 증가
+    for (i = 0; i < 20; i++) {
         clock_gettime(CLOCK_REALTIME, &t1);
         clock_gettime(CLOCK_MONOTONIC, &t2);
         clock_gettime(CLOCK_REALTIME, &t3);
 
-        delta = ts_ns(t3) - ts_ns(t1);
-        ts = (ts_ns(t3) + ts_ns(t1)) / 2;
+        delta = fast_ts_ns(&t3) - fast_ts_ns(&t1);
+        ts = (fast_ts_ns(&t3) + fast_ts_ns(&t1)) / 2;
 
-        if (i == 0 || delta < best_delta) {
+        if (delta < best_delta) {
             best_delta = delta;
-            bpf_ktime_off = ts - ts_ns(t2);
+            bpf_ktime_off = ts - fast_ts_ns(&t2);
         }
     }
 }
