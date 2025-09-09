@@ -65,13 +65,8 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
 
     // Unpack task_info list entries
     for (i = 0; i < sinfo->nr_tasks; i++) {
-        struct task_info *tinfo = malloc(sizeof(struct task_info));
-        if (tinfo == NULL) {
-            fprintf(stderr, "Failed to allocate memory for task_info\n");
-            destroy_task_list(sinfo->tasks);
-            sinfo->tasks = NULL;
-            return TT_ERROR_MEMORY;
-        }
+        struct task_info *tinfo;
+        TT_MALLOC(tinfo, struct task_info);
 
         if (deserialize_str(sbuf, tinfo->node_id) < 0 ||
             deserialize_int32_t(sbuf, &tinfo->allowable_deadline_misses) < 0 ||
@@ -83,9 +78,9 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
             deserialize_int32_t(sbuf, &tinfo->sched_policy) < 0 ||
             deserialize_int32_t(sbuf, &tinfo->sched_priority) < 0 ||
             deserialize_str(sbuf, tinfo->name) < 0) {
-            fprintf(stderr, "Failed to deserialize task_info fields\n");
-            free(tinfo);
-            destroy_task_list(sinfo->tasks);
+            TT_LOG_ERROR("Failed to deserialize task_info fields");
+            TT_FREE(tinfo);
+            destroy_task_info_list(sinfo->tasks);
             sinfo->tasks = NULL;
             return TT_ERROR_NETWORK;
         }
@@ -104,7 +99,7 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
     if (deserialize_str(sbuf, workload_id) < 0 ||
         deserialize_int64_t(sbuf, &hyperperiod_us) < 0) {
         fprintf(stderr, "Failed to deserialize workload info\n");
-        destroy_task_list(sinfo->tasks);
+        destroy_task_info_list(sinfo->tasks);
         sinfo->tasks = NULL;
         return TT_ERROR_NETWORK;
     }
@@ -115,7 +110,7 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
     // context의 hp_manager에 초기화 (수정된 부분)
     if (init_hyperperiod(ctx, workload_id, hyperperiod_us, &ctx->hp_manager) != TT_SUCCESS) {
         fprintf(stderr, "Failed to initialize hyperperiod manager\n");
-        destroy_task_list(sinfo->tasks);
+        destroy_task_info_list(sinfo->tasks);
         sinfo->tasks = NULL;
         return TT_ERROR_CONFIG;
     }

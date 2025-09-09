@@ -51,6 +51,40 @@
         } \
     } while(0)
 
+// 메모리 관리 매크로
+#define TT_MALLOC(ptr, type) \
+    do { \
+        (ptr) = malloc(sizeof(type)); \
+        if (unlikely(!(ptr))) { \
+            TT_LOG_ERROR("Failed to allocate memory for " #type); \
+            return TT_ERROR_MEMORY; \
+        } \
+        memset((ptr), 0, sizeof(type)); \
+    } while(0)
+
+#define TT_CALLOC(ptr, count, type) \
+    do { \
+        (ptr) = calloc((count), sizeof(type)); \
+        if (unlikely(!(ptr))) { \
+            TT_LOG_ERROR("Failed to allocate memory for %zu " #type " items", (size_t)(count)); \
+            return TT_ERROR_MEMORY; \
+        } \
+    } while(0)
+
+#define TT_FREE(ptr) \
+    do { \
+        if (likely((ptr))) { \
+            free((ptr)); \
+            (ptr) = NULL; \
+        } \
+    } while(0)
+
+#define TT_SAFE_FREE(ptr) \
+    do { \
+        free((ptr)); \
+        (ptr) = NULL; \
+    } while(0)
+
 // 컴파일러 힌트 매크로
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -196,7 +230,7 @@ tt_error_t start_hyperperiod_timer(struct context *ctx);
 
 // ===== 태스크 관리 (task.c) =====
 tt_error_t init_task_list(struct context *ctx);
-void destroy_task_list(struct task_info *tasks);
+void destroy_task_info_list(struct task_info *tasks);
 
 // ===== 네트워크 통신 (trpc.c) =====
 tt_error_t init_trpc(struct context *ctx);

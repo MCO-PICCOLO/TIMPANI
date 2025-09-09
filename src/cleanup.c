@@ -47,11 +47,11 @@ static void cleanup_tasks(struct context *ctx)
 
         // 리스트에서 제거 및 메모리 해제
         LIST_REMOVE(tt_p, entry);
-        free(tt_p);
+        TT_FREE(tt_p);
     }
 
     // 스케줄 정보의 태스크 리스트 정리
-    destroy_task_list(ctx->runtime.sched_info.tasks);
+    destroy_task_info_list(ctx->runtime.sched_info.tasks);
     ctx->runtime.sched_info.tasks = NULL;
 }
 

@@ -1,12 +1,11 @@
 #include "internal.h"
 
-void destroy_task_list(struct task_info *tasks)
+void destroy_task_info_list(struct task_info *tasks)
 {
-    struct task_info *current = tasks;
-    while (current) {
-        struct task_info *next = current->next;
-        free(current);
-        current = next;
+    while (tasks) {
+        struct task_info *current = tasks;
+        tasks = tasks->next;
+        TT_FREE(current);
     }
 }
 
@@ -14,7 +13,7 @@ static struct time_trigger *task_create_node(struct task_info *ti, struct contex
 {
     struct time_trigger *tt_node = calloc(1, sizeof(struct time_trigger));
     if (!tt_node) {
-        fprintf(stderr, "Failed to allocate memory for time_trigger\n");
+        TT_LOG_ERROR("Failed to allocate memory for time_trigger");
         return NULL;
     }
 
@@ -79,7 +78,7 @@ tt_error_t init_task_list(struct context *ctx)
         }
 
         if (task_setup_process(tt_node) != TT_SUCCESS) {
-            free(tt_node);
+            TT_FREE(tt_node);
             continue;
         }
 
