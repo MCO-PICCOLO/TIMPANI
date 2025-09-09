@@ -81,42 +81,42 @@ tt_error_t validate_config(const struct context *ctx)
 {
     // 우선순위 검증
     if (ctx->config.prio < -1 || ctx->config.prio > 99) {
-        fprintf(stderr, "Invalid priority: %d (must be -1 or 1-99)\n", ctx->config.prio);
+        TT_LOG_ERROR("Invalid priority: %d (must be -1 or 1-99)", ctx->config.prio);
         return TT_ERROR_CONFIG;
     }
 
     // 포트 검증
     if (ctx->config.port <= 0 || ctx->config.port > 65535) {
-        fprintf(stderr, "Invalid port: %d (must be 1-65535)\n", ctx->config.port);
+        TT_LOG_ERROR("Invalid port: %d (must be 1-65535)", ctx->config.port);
         return TT_ERROR_CONFIG;
     }
 
     // CPU 검증 (간단한 범위 체크)
     if (ctx->config.cpu < -1 || ctx->config.cpu > 1024) {
-        fprintf(stderr, "Invalid CPU number: %d\n", ctx->config.cpu);
+        TT_LOG_ERROR("Invalid CPU number: %d", ctx->config.cpu);
         return TT_ERROR_CONFIG;
     }
 
     // 트레이스 지속시간 검증
     if (ctx->config.traceduration < 0) {
-        fprintf(stderr, "Invalid trace duration: %d (must be >= 0)\n", ctx->config.traceduration);
+        TT_LOG_ERROR("Invalid trace duration: %d (must be >= 0)", ctx->config.traceduration);
         return TT_ERROR_CONFIG;
     }
 
     // 노드 ID 검증
     if (strlen(ctx->config.node_id) == 0) {
-        fprintf(stderr, "Node ID cannot be empty\n");
+        TT_LOG_ERROR("Node ID cannot be empty");
         return TT_ERROR_CONFIG;
     }
 
-    printf("Configuration:\n");
-    printf("  CPU affinity: %d\n", ctx->config.cpu);
-    printf("  Priority: %d\n", ctx->config.prio);
-    printf("  Server: %s:%d\n", ctx->config.addr, ctx->config.port);
-    printf("  Node ID: %s\n", ctx->config.node_id);
-    printf("  Sync enabled: %s\n", ctx->config.enable_sync ? "yes" : "no");
-    printf("  Plot enabled: %s\n", ctx->config.enable_plot ? "yes" : "no");
-    printf("  Trace duration: %d seconds\n", ctx->config.traceduration);
+    TT_LOG_INFO("Configuration:");
+    TT_LOG_INFO("  CPU affinity: %d", ctx->config.cpu);
+    TT_LOG_INFO("  Priority: %d", ctx->config.prio);
+    TT_LOG_INFO("  Server: %s:%d", ctx->config.addr, ctx->config.port);
+    TT_LOG_INFO("  Node ID: %s", ctx->config.node_id);
+    TT_LOG_INFO("  Sync enabled: %s", ctx->config.enable_sync ? "yes" : "no");
+    TT_LOG_INFO("  Plot enabled: %s", ctx->config.enable_plot ? "yes" : "no");
+    TT_LOG_INFO("  Trace duration: %d seconds", ctx->config.traceduration);
 
     return TT_SUCCESS;
 }

@@ -9,14 +9,14 @@ void cleanup_context(struct context *ctx)
 {
     if (!ctx) return;
 
-    printf("Cleaning up resources...\n");
+    TT_LOG_INFO("Cleaning up resources...");
 
     cleanup_tasks(ctx);
     cleanup_communication(ctx);
     cleanup_hyperperiod(ctx);
     cleanup_bpf_trace();
 
-    printf("Time Trigger shutdown completed.\n");
+    TT_LOG_INFO("Time Trigger shutdown completed.");
 }
 
 static void cleanup_tasks(struct context *ctx)

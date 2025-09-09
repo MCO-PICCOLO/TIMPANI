@@ -33,7 +33,7 @@ static int get_schedinfo(struct context *ctx, struct sched_info *sinfo)
     }
 
     if (buf == NULL || bufsize == 0) {
-        printf("Failed to get schedule info\n");
+        TT_LOG_ERROR("Failed to get schedule info");
         return -1;
     }
 
@@ -58,7 +58,7 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
 
     // Unpack sched_info
     if (deserialize_int32_t(sbuf, &sinfo->nr_tasks) < 0) {
-        fprintf(stderr, "Failed to deserialize nr_tasks\n");
+        TT_LOG_ERROR("Failed to deserialize nr_tasks");
         return TT_ERROR_NETWORK;
     }
     sinfo->tasks = NULL;
@@ -88,28 +88,28 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
         tinfo->next = sinfo->tasks;
         sinfo->tasks = tinfo;
 
-        printf("Task info - name: %s, priority: %d, policy: %d, period: %d\n",
+        TT_LOG_INFO("Task info - name: %s, priority: %d, policy: %d, period: %d",
                tinfo->name, tinfo->sched_priority, tinfo->sched_policy, tinfo->period);
-        printf("  release_time: %d, runtime: %d, deadline: %d\n",
+        TT_LOG_INFO("  release_time: %d, runtime: %d, deadline: %d",
                tinfo->release_time, tinfo->runtime, tinfo->deadline);
-        printf("  cpu_affinity: 0x%lx, allowable_deadline_misses: %d, node_id: %s\n",
+        TT_LOG_INFO("  cpu_affinity: 0x%lx, allowable_deadline_misses: %d, node_id: %s",
                tinfo->cpu_affinity, tinfo->allowable_deadline_misses, tinfo->node_id);
     }
 
     if (deserialize_str(sbuf, workload_id) < 0 ||
         deserialize_int64_t(sbuf, &hyperperiod_us) < 0) {
-        fprintf(stderr, "Failed to deserialize workload info\n");
+        TT_LOG_ERROR("Failed to deserialize workload info");
         destroy_task_info_list(sinfo->tasks);
         sinfo->tasks = NULL;
         return TT_ERROR_NETWORK;
     }
 
-    printf("\nWorkload: %s\n", workload_id);
-    printf("Hyperperiod: %lu us\n", hyperperiod_us);
+    TT_LOG_INFO("Workload: %s", workload_id);
+    TT_LOG_INFO("Hyperperiod: %lu us", hyperperiod_us);
 
     // context의 hp_manager에 초기화 (수정된 부분)
     if (init_hyperperiod(ctx, workload_id, hyperperiod_us, &ctx->hp_manager) != TT_SUCCESS) {
-        fprintf(stderr, "Failed to initialize hyperperiod manager\n");
+        TT_LOG_ERROR("Failed to initialize hyperperiod manager");
         destroy_task_info_list(sinfo->tasks);
         sinfo->tasks = NULL;
         return TT_ERROR_CONFIG;
@@ -123,7 +123,7 @@ static int sync_timer_internal(sd_bus *dbus, char *node_id, struct timespec *ts_
     int ret;
     int ack;
 
-    printf("Sync");
+    TT_LOG_INFO("Sync");
     fflush(stdout);
     while (1) {
         ret = trpc_client_sync(dbus, node_id, &ack, ts_ptr);
@@ -132,7 +132,7 @@ static int sync_timer_internal(sd_bus *dbus, char *node_id, struct timespec *ts_
         }
 
         if (ack) {
-            printf("\ntimestamp: %ld sec %ld nsec\n", ts_ptr->tv_sec, ts_ptr->tv_nsec);
+            TT_LOG_INFO("timestamp: %ld sec %ld nsec", ts_ptr->tv_sec, ts_ptr->tv_nsec);
             break;
         }
 
@@ -155,18 +155,18 @@ tt_error_t init_trpc(struct context *ctx)
                                 &ctx->comm.dbus, &ctx->comm.event) == 0) {
             if (get_schedinfo(ctx, &ctx->runtime.sched_info) == 0) {
                 /* Successfully retrieved schedule info */
-                printf("Successfully connected and retrieved schedule info (attempt %d)\n", retry_count + 1);
+                TT_LOG_INFO("Successfully connected and retrieved schedule info (attempt %d)", retry_count + 1);
                 return TT_SUCCESS;
             }
         }
 
         /* failed to get schedule info, retrying */
         retry_count++;
-        printf("Connection attempt %d/%d failed, retrying...\n", retry_count, TT_MAX_CONNECTION_RETRIES);
+        TT_LOG_INFO("Connection attempt %d/%d failed, retrying...", retry_count, TT_MAX_CONNECTION_RETRIES);
         usleep(TT_RETRY_INTERVAL_US);
     }
 
-    fprintf(stderr, "Failed to connect to server after %d attempts\n", TT_MAX_CONNECTION_RETRIES);
+    TT_LOG_ERROR("Failed to connect to server after %d attempts", TT_MAX_CONNECTION_RETRIES);
     return TT_ERROR_NETWORK;
 }
 

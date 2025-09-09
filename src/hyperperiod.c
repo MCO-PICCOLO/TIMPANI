@@ -18,13 +18,11 @@ tt_error_t init_hyperperiod(struct context *ctx, const char *workload_id, uint64
     // Hyperperiod start time will be set when timers actually start
     hp_mgr->hyperperiod_start_time_us = 0;
 
-    printf("Hyperperiod Manager initialized:\n");
-    printf("  Workload ID: %s\n", hp_mgr->workload_id);
-    printf("  Hyperperiod: %lu us (%.3f ms)\n",
-        hp_mgr->hyperperiod_us, hp_mgr->hyperperiod_us / 1000.0);
-    printf("  Start time will be set when timers start\n");
-
-    return TT_SUCCESS;
+    TT_LOG_INFO("Hyperperiod Manager initialized:");
+    TT_LOG_INFO("  Workload ID: %s", hp_mgr->workload_id);
+    TT_LOG_INFO("  Hyperperiod: %lu us (%.3f ms)",
+           hp_mgr->hyperperiod_us, hp_mgr->hyperperiod_us / 1000.0);
+    TT_LOG_INFO("  Start time will be set when timers start");    return TT_SUCCESS;
 }
 
 void hyperperiod_cycle_handler(union sigval value)
@@ -45,7 +43,7 @@ void hyperperiod_cycle_handler(union sigval value)
         hp_mgr->completed_cycles, cycle_time_us, hp_mgr->cycle_deadline_misses);
 
 #ifdef HP_DEBUG
-    printf("Hyperperiod cycle %lu completed (total misses: %u, cycle misses: %u)\n",
+    TT_LOG_INFO("Hyperperiod cycle %lu completed (total misses: %u, cycle misses: %u)",
         hp_mgr->completed_cycles, hp_mgr->total_deadline_misses, hp_mgr->cycle_deadline_misses);
 #endif
 
@@ -87,14 +85,14 @@ void log_hyperperiod_statistics(const struct hyperperiod_manager *hp_mgr)
     double miss_rate = hp_mgr->completed_cycles > 0 ?
         (double)hp_mgr->total_deadline_misses / hp_mgr->completed_cycles : 0.0;
 
-    printf("\n=== Hyperperiod Statistics ===\n");
-    printf("Workload: %s\n", hp_mgr->workload_id);
-    printf("Completed cycles: %lu\n", hp_mgr->completed_cycles);
-    printf("Hyperperiod length: %lu us\n", hp_mgr->hyperperiod_us);
-    printf("Total deadline misses: %u\n", hp_mgr->total_deadline_misses);
-    printf("Miss rate per cycle: %.4f\n", miss_rate);
-    printf("Tasks in hyperperiod: %u\n", hp_mgr->tasks_in_hyperperiod);
-    printf("==============================\n\n");
+    TT_LOG_INFO("=== Hyperperiod Statistics ===");
+    TT_LOG_INFO("Workload: %s", hp_mgr->workload_id);
+    TT_LOG_INFO("Completed cycles: %lu", hp_mgr->completed_cycles);
+    TT_LOG_INFO("Hyperperiod length: %lu us", hp_mgr->hyperperiod_us);
+    TT_LOG_INFO("Total deadline misses: %u", hp_mgr->total_deadline_misses);
+    TT_LOG_INFO("Miss rate per cycle: %.4f", miss_rate);
+    TT_LOG_INFO("Tasks in hyperperiod: %u", hp_mgr->tasks_in_hyperperiod);
+    TT_LOG_INFO("==============================");
 }
 
 tt_error_t start_hyperperiod_timer(struct context *ctx)
@@ -103,7 +101,7 @@ tt_error_t start_hyperperiod_timer(struct context *ctx)
     struct sigevent sev;
 
     if (ctx->hp_manager.hyperperiod_us == 0) {
-        printf("Warning: Hyperperiod not set, skipping hyperperiod timer\n");
+        TT_LOG_WARNING("Hyperperiod not set, skipping hyperperiod timer");
         return TT_SUCCESS;
     }
 
@@ -111,7 +109,7 @@ tt_error_t start_hyperperiod_timer(struct context *ctx)
     ctx->hp_manager.hyperperiod_start_ts = ctx->runtime.starttimer_ts;
     ctx->hp_manager.hyperperiod_start_time_us = ts_us(ctx->hp_manager.hyperperiod_start_ts);
 
-    printf("Hyperperiod start time set: %lu us\n", ctx->hp_manager.hyperperiod_start_time_us);
+    TT_LOG_INFO("Hyperperiod start time set: %lu us", ctx->hp_manager.hyperperiod_start_time_us);
 
     memset(&sev, 0, sizeof(sev));
     memset(&its, 0, sizeof(its));
@@ -131,7 +129,7 @@ tt_error_t start_hyperperiod_timer(struct context *ctx)
     its.it_interval.tv_sec = ctx->hp_manager.hyperperiod_us / USEC_PER_SEC;
     its.it_interval.tv_nsec = (ctx->hp_manager.hyperperiod_us % USEC_PER_SEC) * NSEC_PER_USEC;
 
-    printf("Starting hyperperiod timer: %lu us interval (%lds %ldns)\n",
+    TT_LOG_INFO("Starting hyperperiod timer: %lu us interval (%lds %ldns)",
         ctx->hp_manager.hyperperiod_us, its.it_interval.tv_sec, its.it_interval.tv_nsec);
 
     if (timer_create(ctx->config.clockid, &sev, &ctx->hp_manager.hyperperiod_timer)) {

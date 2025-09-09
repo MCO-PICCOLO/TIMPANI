@@ -26,18 +26,18 @@ static tt_error_t task_setup_process(struct time_trigger *tt_node)
 {
     unsigned int pid = get_pid_by_name(tt_node->task.name);
     if (pid == -1) {
-        printf("%s is not running!\n", tt_node->task.name);
+        TT_LOG_INFO("%s is not running!", tt_node->task.name);
         return TT_ERROR_CONFIG;
     }
 
     if (set_affinity(pid, (int)tt_node->task.cpu_affinity) != 0) {
-        fprintf(stderr, "Warning: Failed to set CPU affinity for task %s (PID %d)\n",
+        TT_LOG_WARNING("Failed to set CPU affinity for task %s (PID %d)",
             tt_node->task.name, pid);
         // Continue anyway, affinity is not critical for basic operation
     }
 
     if (set_schedattr(pid, tt_node->task.sched_priority, tt_node->task.sched_policy) != 0) {
-        fprintf(stderr, "Warning: Failed to set scheduling attributes for task %s (PID %d)\n",
+        TT_LOG_WARNING("Failed to set scheduling attributes for task %s (PID %d)",
             tt_node->task.name, pid);
         // Continue anyway, scheduling priority is not critical for basic operation
     }
@@ -47,13 +47,13 @@ static tt_error_t task_setup_process(struct time_trigger *tt_node)
     // Create pidfd for the task
     tt_node->task.pidfd = create_pidfd(pid);
     if (tt_node->task.pidfd < 0) {
-        fprintf(stderr, "Failed to create pidfd for task %s (PID %d)\n",
+        TT_LOG_ERROR("Failed to create pidfd for task %s (PID %d)",
             tt_node->task.name, pid);
         return TT_ERROR_CONFIG;
     }
 
     if (bpf_add_pid(pid) < 0) {
-        fprintf(stderr, "Warning: Failed to add PID %d to BPF monitoring\n", pid);
+        TT_LOG_WARNING("Failed to add PID %d to BPF monitoring", pid);
         // Continue anyway, monitoring is not critical for basic operation
     }
 
@@ -91,10 +91,10 @@ tt_error_t init_task_list(struct context *ctx)
     }
 
     if (success_count == 0) {
-        fprintf(stderr, "No tasks were successfully initialized\n");
+        TT_LOG_ERROR("No tasks were successfully initialized");
         return TT_ERROR_CONFIG;
     }
 
-    printf("Successfully initialized %d tasks\n", success_count);
+    TT_LOG_INFO("Successfully initialized %d tasks", success_count);
     return TT_SUCCESS;
 }

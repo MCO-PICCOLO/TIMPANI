@@ -165,7 +165,7 @@ void timer_expired_handler(union sigval value)
 
     // Send the signal to the target process
     if (send_signal_pidfd(task->pidfd, SIGNO_TT) < 0) {
-        fprintf(stderr, "Failed to send signal via pidfd to %s (PID %d)\n",
+        TT_LOG_ERROR("Failed to send signal via pidfd to %s (PID %d)",
             task->name, task->pid);
         // TODO: check if the process is still alive
     }
@@ -243,7 +243,7 @@ tt_error_t epoll_loop(struct context *ctx)
     }
 
     // Main execution loop with graceful shutdown support
-    printf("Time Trigger started. Press Ctrl+C to stop gracefully.\n");
+    TT_LOG_INFO("Time Trigger started. Press Ctrl+C to stop gracefully.");
     while (!ctx->runtime.shutdown_requested) {
         struct epoll_event events[1];
         int count = epoll_wait(efd, events, 1, -1);

@@ -43,6 +43,12 @@
 #define TT_LOG_WARNING(fmt, ...) \
     fprintf(stderr, "[WARNING] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
 
+#define TT_LOG_INFO(fmt, ...) \
+    printf("[INFO] " fmt "\n", ##__VA_ARGS__)
+
+#define TT_LOG_DEBUG(fmt, ...) \
+    printf("[DEBUG] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+
 #define TT_CHECK_ERROR(expr, error_code, fmt, ...) \
     do { \
         if (unlikely(!(expr))) { \
@@ -102,7 +108,10 @@ typedef enum {
     TT_ERROR_SIGNAL = -3,        // 시그널 처리 오류
     TT_ERROR_NETWORK = -4,       // 네트워크 통신 오류
     TT_ERROR_CONFIG = -5,        // 설정 관련 오류
-    TT_ERROR_BPF = -6           // BPF 프로그램 오류
+    TT_ERROR_BPF = -6,           // BPF 프로그램 오류
+    TT_ERROR_INVALID_ARGS = -7,  // 잘못된 인자
+    TT_ERROR_IO = -8,            // 입출력 오류
+    TT_ERROR_PERMISSION = -9     // 권한 오류
 } tt_error_t;
 
 // 에러 메시지 함수
@@ -116,6 +125,9 @@ static inline const char* tt_error_string(tt_error_t error)
         case TT_ERROR_NETWORK: return "Network operation failed";
         case TT_ERROR_CONFIG: return "Configuration error";
         case TT_ERROR_BPF: return "BPF operation failed";
+        case TT_ERROR_INVALID_ARGS: return "Invalid arguments";
+        case TT_ERROR_IO: return "Input/Output error";
+        case TT_ERROR_PERMISSION: return "Permission denied";
         default: return "Unknown error";
     }
 }
