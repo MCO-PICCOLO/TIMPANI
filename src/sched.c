@@ -51,7 +51,7 @@ static int sched_setattr_tt(pid_t pid, const struct sched_attr_tt *attr,
 	return syscall(SYS_sched_setattr, pid, attr, flags);
 }
 
-void set_schedattr(pid_t pid, unsigned int priority, unsigned int policy) {
+int set_schedattr(pid_t pid, unsigned int priority, unsigned int policy) {
 	struct sched_attr_tt attr;
 
 	memset(&attr, 0, sizeof(attr));
@@ -61,7 +61,9 @@ void set_schedattr(pid_t pid, unsigned int priority, unsigned int policy) {
 
 	if (sched_setattr_tt(pid, &attr, 0) == -1) {
 		perror("Error calling sched_setattr.");
+		return -1;
 	}
+	return 0;
 }
 
 void get_process_name_by_pid(const int pid, char name[])

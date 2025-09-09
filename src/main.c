@@ -45,14 +45,21 @@ static tt_error_t initialize(struct context *ctx)
 
     // 프로세스 우선순위 설정
     if (ctx->config.cpu != -1) {
-        set_affinity(pid, ctx->config.cpu);
+        if (set_affinity(pid, ctx->config.cpu) != 0) {
+            fprintf(stderr, "Warning: Failed to set CPU affinity to %d\n", ctx->config.cpu);
+        }
     }
     if (ctx->config.prio > 0 && ctx->config.prio <= 99) {
-        set_schedattr(pid, ctx->config.prio, SCHED_FIFO);
+        if (set_schedattr(pid, ctx->config.prio, SCHED_FIFO) != 0) {
+            fprintf(stderr, "Warning: Failed to set scheduling attributes (prio=%d)\n", ctx->config.prio);
+        }
     }
 
     // BPF 초기화
-    calibrate_bpf_time_offset();
+    if (calibrate_bpf_time_offset() != TT_SUCCESS) {
+        TT_LOG_ERROR("Failed to calibrate BPF time offset");
+        return TT_ERROR_BPF;
+    }
 
     // TRPC 초기화 및 스케줄 정보 획득
     if (init_trpc(ctx) != TT_SUCCESS) {
@@ -97,7 +104,12 @@ static tt_error_t run(struct context *ctx)
 
     // 트레이싱 설정 및 활성화
     tt_error_t trace_result = setup_trace_stop_timer(ctx, ctx->config.traceduration, &tracetimer);
-    settimer = (trace_result == TT_SUCCESS);
+    if (trace_result != TT_SUCCESS) {
+        fprintf(stderr, "Warning: Failed to setup trace stop timer: %s\n", tt_error_string(trace_result));
+        settimer = false;
+    } else {
+        settimer = true;
+    }
     tracer_on();
 
 #if defined(CONFIG_TRACE_EVENT) || defined(CONFIG_TRACE_BPF_EVENT)

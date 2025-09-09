@@ -4,7 +4,7 @@
 #ifdef CONFIG_TRACE_BPF
 static uint64_t bpf_ktime_off;
 
-static void calibrate_bpf_ktime_offset_internal(void)
+static tt_error_t calibrate_bpf_ktime_offset_internal(void)
 {
     int i;
     struct timespec t1, t2, t3;
@@ -12,9 +12,18 @@ static void calibrate_bpf_ktime_offset_internal(void)
 
     // 더 정확한 보정을 위해 반복 횟수 증가
     for (i = 0; i < 20; i++) {
-        clock_gettime(CLOCK_REALTIME, &t1);
-        clock_gettime(CLOCK_MONOTONIC, &t2);
-        clock_gettime(CLOCK_REALTIME, &t3);
+        if (clock_gettime(CLOCK_REALTIME, &t1) < 0) {
+            TT_LOG_ERROR("Failed to get CLOCK_REALTIME");
+            return TT_ERROR_TIMER;
+        }
+        if (clock_gettime(CLOCK_MONOTONIC, &t2) < 0) {
+            TT_LOG_ERROR("Failed to get CLOCK_MONOTONIC");
+            return TT_ERROR_TIMER;
+        }
+        if (clock_gettime(CLOCK_REALTIME, &t3) < 0) {
+            TT_LOG_ERROR("Failed to get CLOCK_REALTIME");
+            return TT_ERROR_TIMER;
+        }
 
         delta = tt_timespec_to_ns(&t3) - tt_timespec_to_ns(&t1);
         ts = (tt_timespec_to_ns(&t3) + tt_timespec_to_ns(&t1)) / 2;
@@ -24,6 +33,7 @@ static void calibrate_bpf_ktime_offset_internal(void)
             bpf_ktime_off = ts - tt_timespec_to_ns(&t2);
         }
     }
+    return TT_SUCCESS;
 }
 
 static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts)
@@ -53,7 +63,7 @@ tt_error_t handle_sigwait_bpf_event(void *ctx, void *data, size_t len)
     return TT_SUCCESS;
 }
 #else
-static inline void calibrate_bpf_ktime_offset_internal(void) {}
+static inline tt_error_t calibrate_bpf_ktime_offset_internal(void) { return TT_SUCCESS; }
 static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts) { return bpf_ts; }
 tt_error_t handle_sigwait_bpf_event(void *ctx, void *data, size_t len) { return TT_SUCCESS; }
 #endif
@@ -73,9 +83,9 @@ tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len)
 tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len) { return TT_SUCCESS; }
 #endif
 
-void calibrate_bpf_time_offset(void)
+tt_error_t calibrate_bpf_time_offset(void)
 {
-    calibrate_bpf_ktime_offset_internal();
+    return calibrate_bpf_ktime_offset_internal();
 }
 
 // 타이머 핸들러 함수
@@ -118,7 +128,9 @@ void timer_expired_handler(union sigval value)
                 task->name, task->pid, deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_deadline_miss(ctx, task->name);
+            if (report_deadline_miss(ctx, task->name) != TT_SUCCESS) {
+                TT_LOG_WARNING("Failed to report deadline miss for task %s", task->name);
+            }
         // Check if this task meets the deadline
         } else if (tt_node->sigwait_ts > deadline_ns) {
             printf("!!! DEADLINE MISS %s(%d): %lu > deadline %lu !!!\n",
@@ -127,7 +139,9 @@ void timer_expired_handler(union sigval value)
                 task->name, tt_node->sigwait_ts - deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_deadline_miss(ctx, task->name);
+            if (report_deadline_miss(ctx, task->name) != TT_SUCCESS) {
+                TT_LOG_WARNING("Failed to report deadline miss for task %s", task->name);
+            }
         // Check if this task is stuck at kernel sigwait syscall handler
         } else if (tt_node->sigwait_ts == tt_node->sigwait_ts_prev) {
             printf("!!! DEADLINE MISS: STUCK AT KERNEL %s(%d): %lu & deadline %lu !!!\n",
@@ -136,7 +150,9 @@ void timer_expired_handler(union sigval value)
                 task->name, tt_node->sigwait_ts - deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_deadline_miss(ctx, task->name);
+            if (report_deadline_miss(ctx, task->name) != TT_SUCCESS) {
+                TT_LOG_WARNING("Failed to report deadline miss for task %s", task->name);
+            }
         }
 
         tt_node->sigwait_ts_prev = tt_node->sigwait_ts;

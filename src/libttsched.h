@@ -26,7 +26,7 @@ struct sched_attr_tt {
 };
 
 int set_affinity(pid_t pid, int cpu);
-void set_schedattr(pid_t pid, unsigned int priority, unsigned int policy);
+int set_schedattr(pid_t pid, unsigned int priority, unsigned int policy);
 void get_process_name_by_pid(const int pid, char name[]);
 int get_pid_by_name(const char *name);
 

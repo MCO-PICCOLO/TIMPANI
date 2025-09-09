@@ -36,6 +36,21 @@
 // 로깅 및 통계 상수
 #define TT_STATISTICS_LOG_INTERVAL   100                 // 통계 로그 출력 주기 (하이퍼피리어드 사이클 기준)
 
+// 에러 로깅 매크로
+#define TT_LOG_ERROR(fmt, ...) \
+    fprintf(stderr, "[ERROR] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+
+#define TT_LOG_WARNING(fmt, ...) \
+    fprintf(stderr, "[WARNING] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+
+#define TT_CHECK_ERROR(expr, error_code, fmt, ...) \
+    do { \
+        if (unlikely(!(expr))) { \
+            TT_LOG_ERROR(fmt, ##__VA_ARGS__); \
+            return error_code; \
+        } \
+    } while(0)
+
 // 컴파일러 힌트 매크로
 #ifndef likely
 #define likely(x)   __builtin_expect(!!(x), 1)
@@ -196,7 +211,7 @@ tt_error_t setup_signal_handlers(struct context *ctx);
 void cleanup_context(struct context *ctx);
 
 // ===== 유틸리티 함수들 =====
-void calibrate_bpf_time_offset(void);
+tt_error_t calibrate_bpf_time_offset(void);
 tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer);
 
 #endif /* _INTERNAL_H */

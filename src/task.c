@@ -37,7 +37,11 @@ static tt_error_t task_setup_process(struct time_trigger *tt_node)
         // Continue anyway, affinity is not critical for basic operation
     }
 
-    set_schedattr(pid, tt_node->task.sched_priority, tt_node->task.sched_policy);
+    if (set_schedattr(pid, tt_node->task.sched_priority, tt_node->task.sched_policy) != 0) {
+        fprintf(stderr, "Warning: Failed to set scheduling attributes for task %s (PID %d)\n",
+            tt_node->task.name, pid);
+        // Continue anyway, scheduling priority is not critical for basic operation
+    }
 
     tt_node->task.pid = pid;
 
