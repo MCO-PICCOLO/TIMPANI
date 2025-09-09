@@ -144,7 +144,7 @@ static int sync_timer_internal(sd_bus *dbus, char *node_id, struct timespec *ts_
         printf(".");
         fflush(stdout);
         /* sleep 100ms to prevent busy polling */
-        usleep(POLLING_INTERVAL_US);
+        usleep(TT_POLLING_INTERVAL_US);
     }
 
     return 0;
@@ -155,7 +155,7 @@ tt_error_t init_trpc(struct context *ctx)
     int retry_count = 0;
 
     // Initialize trpc channel and get schedule info with retry logic
-    while (retry_count < MAX_CONNECTION_RETRIES) {
+    while (retry_count < TT_MAX_CONNECTION_RETRIES) {
         if (init_trpc_connection(ctx->config.addr, ctx->config.port,
                                 &ctx->comm.dbus, &ctx->comm.event) == 0) {
             if (get_schedinfo(ctx->comm.dbus, ctx->config.node_id,
@@ -168,11 +168,11 @@ tt_error_t init_trpc(struct context *ctx)
 
         /* failed to get schedule info, retrying */
         retry_count++;
-        printf("Connection attempt %d/%d failed, retrying...\n", retry_count, MAX_CONNECTION_RETRIES);
-        usleep(RETRY_INTERVAL_US);
+        printf("Connection attempt %d/%d failed, retrying...\n", retry_count, TT_MAX_CONNECTION_RETRIES);
+        usleep(TT_RETRY_INTERVAL_US);
     }
 
-    fprintf(stderr, "Failed to connect to server after %d attempts\n", MAX_CONNECTION_RETRIES);
+    fprintf(stderr, "Failed to connect to server after %d attempts\n", TT_MAX_CONNECTION_RETRIES);
     return TT_ERROR_NETWORK;
 }
 

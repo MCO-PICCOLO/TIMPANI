@@ -53,7 +53,7 @@ void hyperperiod_cycle_handler(union sigval value)
     hp_mgr->cycle_deadline_misses = 0;
 
     // Log statistics every interval
-    if (hp_mgr->completed_cycles % STATISTICS_LOG_INTERVAL == 0) {
+    if (hp_mgr->completed_cycles % TT_STATISTICS_LOG_INTERVAL == 0) {
         log_hyperperiod_statistics(hp_mgr);
     }
 }
@@ -68,7 +68,7 @@ uint64_t get_hyperperiod_relative_time(const struct hyperperiod_manager *hp_mgr)
     }
 
     clock_gettime(hp_mgr->ctx->config.clockid, &now);
-    uint64_t current_time_us = fast_ts_us(&now);
+    uint64_t current_time_us = tt_timespec_to_us(&now);
 
     uint64_t elapsed_us = current_time_us - hp_mgr->hyperperiod_start_time_us;
 

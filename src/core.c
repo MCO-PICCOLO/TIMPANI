@@ -16,12 +16,12 @@ static void calibrate_bpf_ktime_offset_internal(void)
         clock_gettime(CLOCK_MONOTONIC, &t2);
         clock_gettime(CLOCK_REALTIME, &t3);
 
-        delta = fast_ts_ns(&t3) - fast_ts_ns(&t1);
-        ts = (fast_ts_ns(&t3) + fast_ts_ns(&t1)) / 2;
+        delta = tt_timespec_to_ns(&t3) - tt_timespec_to_ns(&t1);
+        ts = (tt_timespec_to_ns(&t3) + tt_timespec_to_ns(&t1)) / 2;
 
         if (delta < best_delta) {
             best_delta = delta;
-            bpf_ktime_off = ts - fast_ts_ns(&t2);
+            bpf_ktime_off = ts - tt_timespec_to_ns(&t2);
         }
     }
 }
@@ -164,7 +164,7 @@ tt_error_t start_timers(struct context *ctx)
     if (!ctx->config.enable_sync) {
         /* No synchronization across multiple nodes */
         clock_gettime(ctx->config.clockid, &ctx->runtime.starttimer_ts);
-        ctx->runtime.starttimer_ts.tv_nsec += TIMER_INCREMENT_NS;
+        ctx->runtime.starttimer_ts.tv_nsec += TT_TIMER_INCREMENT_NS;
     }
 
     LIST_FOREACH(tt_p, &ctx->runtime.tt_list, entry) {

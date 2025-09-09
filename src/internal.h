@@ -22,12 +22,19 @@
 #include <libtrpc.h>
 #include "trace_bpf.h"
 
-// 상수 정의
-#define TIMER_INCREMENT_NS        (5 * 1000 * 1000)   // 5ms
-#define POLLING_INTERVAL_US       (100 * 1000)        // 100ms
-#define RETRY_INTERVAL_US         (1000 * 1000)       // 1s
-#define MAX_CONNECTION_RETRIES    300
-#define STATISTICS_LOG_INTERVAL   100
+// ===== TT 시스템 상수 정의 =====
+// Time Trigger 시스템에서 사용하는 모든 상수들을 TT_ 네임스페이스로 관리
+
+// 타이머 관련 상수
+#define TT_TIMER_INCREMENT_NS        (5 * 1000 * 1000)   // 5ms - 타이머 정밀도 조정 값
+
+// 네트워크 통신 상수
+#define TT_POLLING_INTERVAL_US       (100 * 1000)        // 100ms - 폴링 간격
+#define TT_RETRY_INTERVAL_US         (1000 * 1000)       // 1s - 재시도 간격
+#define TT_MAX_CONNECTION_RETRIES    300                 // 최대 연결 재시도 횟수
+
+// 로깅 및 통계 상수
+#define TT_STATISTICS_LOG_INTERVAL   100                 // 통계 로그 출력 주기 (하이퍼피리어드 사이클 기준)
 
 // 컴파일러 힌트 매크로
 #ifndef likely
@@ -37,15 +44,16 @@
 #define unlikely(x) __builtin_expect(!!(x), 0)
 #endif
 
-// 에러 코드
+// ===== TT 에러 코드 시스템 =====
+// 모든 함수는 통일된 tt_error_t 타입을 반환하여 일관된 에러 처리 제공
 typedef enum {
-    TT_SUCCESS = 0,
-    TT_ERROR_MEMORY = -1,
-    TT_ERROR_TIMER = -2,
-    TT_ERROR_SIGNAL = -3,
-    TT_ERROR_NETWORK = -4,
-    TT_ERROR_CONFIG = -5,
-    TT_ERROR_BPF = -6
+    TT_SUCCESS = 0,              // 성공
+    TT_ERROR_MEMORY = -1,        // 메모리 할당 실패
+    TT_ERROR_TIMER = -2,         // 타이머 관련 오류
+    TT_ERROR_SIGNAL = -3,        // 시그널 처리 오류
+    TT_ERROR_NETWORK = -4,       // 네트워크 통신 오류
+    TT_ERROR_CONFIG = -5,        // 설정 관련 오류
+    TT_ERROR_BPF = -6           // BPF 프로그램 오류
 } tt_error_t;
 
 // 에러 메시지 함수
@@ -63,35 +71,12 @@ static inline const char* tt_error_string(tt_error_t error)
     }
 }
 
-// 성능 최적화 인라인 함수들
-static inline uint64_t fast_ts_ns(const struct timespec *ts)
+// 시간 처리 유틸리티 함수 (timetrigger.h의 통합 API 사용)
+static inline void tt_timespec_add_us(struct timespec *ts, uint64_t us)
 {
-    return ((uint64_t)ts->tv_sec * NSEC_PER_SEC) + ts->tv_nsec;
+    uint64_t total_ns = tt_timespec_to_ns(ts) + (us * TT_NSEC_PER_USEC);
+    *ts = tt_ns_to_timespec(total_ns);
 }
-
-static inline uint64_t fast_ts_us(const struct timespec *ts)
-{
-    return ((uint64_t)ts->tv_sec * USEC_PER_SEC) + (ts->tv_nsec / NSEC_PER_USEC);
-}
-
-static inline void fast_timespec_add_us(struct timespec *ts, uint64_t us)
-{
-    uint64_t total_ns = fast_ts_ns(ts) + (us * NSEC_PER_USEC);
-    ts->tv_sec = total_ns / NSEC_PER_SEC;
-    ts->tv_nsec = total_ns % NSEC_PER_SEC;
-}
-
-static inline int fast_timespec_cmp(const struct timespec *a, const struct timespec *b)
-{
-    if (a->tv_sec != b->tv_sec) {
-        return (a->tv_sec > b->tv_sec) ? 1 : -1;
-    }
-    return (a->tv_nsec > b->tv_nsec) ? 1 : ((a->tv_nsec < b->tv_nsec) ? -1 : 0);
-}
-
-// 시그널 정의
-#define SIGNO_TT            __SIGRTMIN+2
-#define SIGNO_STOPTRACER    __SIGRTMIN+3
 
 // Forward declaration
 struct context;
@@ -138,75 +123,79 @@ struct hyperperiod_manager {
 
 LIST_HEAD(listhead, time_trigger);
 
-// 통합 컨텍스트 구조체
+// ===== TT 시스템 컨텍스트 구조체 =====
+// 전역 변수를 대체하는 중앙화된 컨텍스트 관리
+// 모든 모듈에서 필요한 상태와 설정을 하나의 구조체로 통합
 struct context {
-    // 설정
+    // 시스템 설정 (config.c에서 초기화)
     struct {
-        int cpu;
-        int prio;
-        int port;
-        const char *addr;
-        char node_id[TINFO_NODEID_MAX];
-        bool enable_sync;
-        bool enable_plot;
-        clockid_t clockid;
-        int traceduration;
+        int cpu;                        // CPU 바인딩 번호
+        int prio;                       // 스케줄링 우선순위
+        int port;                       // 네트워크 포트
+        const char *addr;               // 서버 주소
+        char node_id[TINFO_NODEID_MAX]; // 노드 식별자
+        bool enable_sync;               // 타이머 동기화 활성화
+        bool enable_plot;               // 플롯 기능 활성화
+        clockid_t clockid;              // 사용할 클록 타입
+        int traceduration;              // 트레이스 지속 시간
     } config;
 
-    // 런타임 상태
+    // 런타임 상태 (실행 중 변경되는 동적 상태)
     struct {
-        struct listhead tt_list;
-        struct sched_info sched_info;
-        volatile sig_atomic_t shutdown_requested;
-        struct timespec starttimer_ts;
+        struct listhead tt_list;        // 시간 트리거 태스크 목록
+        struct sched_info sched_info;   // 스케줄링 정보
+        volatile sig_atomic_t shutdown_requested; // 종료 요청 플래그
+        struct timespec starttimer_ts;  // 시작 타이머 타임스탬프
     } runtime;
 
-    // 통신
+    // 통신 관련 (D-Bus, 이벤트 루프)
     struct {
-        sd_event *event;
-        sd_bus *dbus;
+        sd_event *event;                // systemd 이벤트 루프
+        sd_bus *dbus;                   // D-Bus 연결
     } comm;
 
-    // 하이퍼피리어드 관리
+    // 하이퍼피리어드 관리자 (hyperperiod.c에서 관리)
     struct hyperperiod_manager hp_manager;
 };
 
-// 각 모듈의 함수 선언들
-// config.c
+// ===== TT 시스템 함수 선언 =====
+// 모듈별로 체계적으로 정리된 함수 인터페이스
+
+// ===== 설정 관리 (config.c) =====
 tt_error_t parse_config(int argc, char *argv[], struct context *ctx);
 tt_error_t validate_config(const struct context *ctx);
 
-// core.c
+// ===== 코어 엔진 (core.c) =====
 void timer_expired_handler(union sigval value);
 tt_error_t start_timers(struct context *ctx);
 tt_error_t epoll_loop(struct context *ctx);
 tt_error_t handle_sigwait_bpf_event(void *ctx, void *data, size_t len);
 tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len);
 
-// hyperperiod.c
+// ===== 하이퍼피리어드 관리 (hyperperiod.c) =====
 tt_error_t init_hyperperiod(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx);
 void hyperperiod_cycle_handler(union sigval value);
 uint64_t get_hyperperiod_relative_time(const struct hyperperiod_manager *hp_mgr);
 void log_hyperperiod_statistics(const struct hyperperiod_manager *hp_mgr);
 tt_error_t start_hyperperiod_timer(struct context *ctx);
 
-// task.c
+// ===== 태스크 관리 (task.c) =====
 tt_error_t init_task_list(struct context *ctx);
 void destroy_task_list(struct task_info *tasks);
 
-// trpc.c
+// ===== 네트워크 통신 (trpc.c) =====
 tt_error_t init_trpc(struct context *ctx);
 tt_error_t sync_timer_with_server(struct context *ctx);
 tt_error_t deserialize_sched_info(serial_buf_t *sbuf, struct sched_info *sinfo, struct context *ctx);
 tt_error_t report_deadline_miss(sd_bus *dbus, char *node_id, const char *taskname);
 
-// signal.c
+// ===== 시그널 처리 (signal.c) =====
 tt_error_t setup_signal_handlers(struct context *ctx);
 
-// cleanup.c
+// ===== 리소스 정리 (cleanup.c) =====
 void cleanup_context(struct context *ctx);
 
-// 유틸리티 함수들
+// ===== 유틸리티 함수들 =====
 void calibrate_bpf_time_offset(void);
 tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer);
 
