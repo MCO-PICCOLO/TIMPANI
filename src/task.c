@@ -24,31 +24,34 @@ static struct time_trigger *task_create_node(struct task_info *ti, struct contex
 
 static tt_error_t task_setup_process(struct time_trigger *tt_node)
 {
-    unsigned int pid = get_pid_by_name(tt_node->task.name);
-    if (pid == -1) {
-        TT_LOG_INFO("%s is not running!", tt_node->task.name);
+    int pid;
+    ttsched_error_t pid_result = get_pid_by_name(tt_node->task.name, &pid);
+    if (pid_result != TTSCHED_SUCCESS) {
+        TT_LOG_INFO("%s is not running! (%s)", tt_node->task.name, ttsched_error_string(pid_result));
         return TT_ERROR_CONFIG;
     }
 
-    if (set_affinity(pid, (int)tt_node->task.cpu_affinity) != 0) {
-        TT_LOG_WARNING("Failed to set CPU affinity for task %s (PID %d)",
-            tt_node->task.name, pid);
+    ttsched_error_t affinity_result = set_affinity(pid, (int)tt_node->task.cpu_affinity);
+    if (affinity_result != TTSCHED_SUCCESS) {
+        TT_LOG_WARNING("Failed to set CPU affinity for task %s (PID %d): %s",
+            tt_node->task.name, pid, ttsched_error_string(affinity_result));
         // Continue anyway, affinity is not critical for basic operation
     }
 
-    if (set_schedattr(pid, tt_node->task.sched_priority, tt_node->task.sched_policy) != 0) {
-        TT_LOG_WARNING("Failed to set scheduling attributes for task %s (PID %d)",
-            tt_node->task.name, pid);
+    ttsched_error_t sched_result = set_schedattr(pid, tt_node->task.sched_priority, tt_node->task.sched_policy);
+    if (sched_result != TTSCHED_SUCCESS) {
+        TT_LOG_WARNING("Failed to set scheduling attributes for task %s (PID %d): %s",
+            tt_node->task.name, pid, ttsched_error_string(sched_result));
         // Continue anyway, scheduling priority is not critical for basic operation
     }
 
     tt_node->task.pid = pid;
 
     // Create pidfd for the task
-    tt_node->task.pidfd = create_pidfd(pid);
-    if (tt_node->task.pidfd < 0) {
-        TT_LOG_ERROR("Failed to create pidfd for task %s (PID %d)",
-            tt_node->task.name, pid);
+    ttsched_error_t pidfd_result = create_pidfd(pid, &tt_node->task.pidfd);
+    if (pidfd_result != TTSCHED_SUCCESS) {
+        TT_LOG_ERROR("Failed to create pidfd for task %s (PID %d): %s",
+            tt_node->task.name, pid, ttsched_error_string(pidfd_result));
         return TT_ERROR_CONFIG;
     }
 

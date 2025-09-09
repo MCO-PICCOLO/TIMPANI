@@ -20,7 +20,7 @@ static int init_trpc_connection(const char *addr, int port, sd_bus **dbus_ret, s
     return ret;
 }
 
-static int get_schedinfo(struct context *ctx, struct sched_info *sinfo)
+static int get_sched_info(struct context *ctx, struct sched_info *sinfo)
 {
     int ret;
     void *buf = NULL;
@@ -153,7 +153,7 @@ tt_error_t init_trpc(struct context *ctx)
     while (retry_count < TT_MAX_CONNECTION_RETRIES) {
         if (init_trpc_connection(ctx->config.addr, ctx->config.port,
                                 &ctx->comm.dbus, &ctx->comm.event) == 0) {
-            if (get_schedinfo(ctx, &ctx->runtime.sched_info) == 0) {
+            if (get_sched_info(ctx, &ctx->runtime.sched_info) == 0) {
                 /* Successfully retrieved schedule info */
                 TT_LOG_INFO("Successfully connected and retrieved schedule info (attempt %d)", retry_count + 1);
                 return TT_SUCCESS;

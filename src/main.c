@@ -45,13 +45,17 @@ static tt_error_t initialize(struct context *ctx)
 
     // 프로세스 우선순위 설정
     if (ctx->config.cpu != -1) {
-        if (set_affinity(pid, ctx->config.cpu) != 0) {
-            TT_LOG_WARNING("Failed to set CPU affinity to %d", ctx->config.cpu);
+        ttsched_error_t affinity_result = set_affinity(pid, ctx->config.cpu);
+        if (affinity_result != TTSCHED_SUCCESS) {
+            TT_LOG_WARNING("Failed to set CPU affinity to %d: %s",
+                ctx->config.cpu, ttsched_error_string(affinity_result));
         }
     }
     if (ctx->config.prio > 0 && ctx->config.prio <= 99) {
-        if (set_schedattr(pid, ctx->config.prio, SCHED_FIFO) != 0) {
-            TT_LOG_WARNING("Failed to set scheduling attributes (prio=%d)", ctx->config.prio);
+        ttsched_error_t sched_result = set_schedattr(pid, ctx->config.prio, SCHED_FIFO);
+        if (sched_result != TTSCHED_SUCCESS) {
+            TT_LOG_WARNING("Failed to set scheduling attributes (prio=%d): %s",
+                ctx->config.prio, ttsched_error_string(sched_result));
         }
     }
 

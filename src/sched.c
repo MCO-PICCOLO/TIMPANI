@@ -13,20 +13,24 @@
 
 #include "libttsched.h"
 
+// Ensure SCHED_NORMAL is defined (sometimes defined as SCHED_OTHER)
+#ifndef SCHED_NORMAL
+#define SCHED_NORMAL 0
+#endif
 #define PROCESS_NAME_SIZE	16
 
-int set_affinity(pid_t pid, int cpu) {
+ttsched_error_t set_affinity(pid_t pid, int cpu) {
 	cpu_set_t cpuset;
 	int num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
 
 	if (num_cpus < 0) {
-		fprintf(stderr, "Error: Failed to get number of CPUs: %s\n", strerror(errno));
-		return -1;
+		TTSCHED_LOG_ERROR("Failed to get number of CPUs: %s", strerror(errno));
+		return TTSCHED_ERROR_SYSTEM;
 	}
 
 	// Validate CPU number
 	if (cpu < 0 || cpu >= num_cpus) {
-		fprintf(stderr, "Warning: Invalid CPU %d (available: 0-%d), setting to CPU 0\n",
+		TTSCHED_LOG_WARNING("Invalid CPU %d (available: 0-%d), setting to CPU 0",
 			cpu, num_cpus - 1);
 		cpu = 0; // Fallback to CPU 0
 	}
@@ -36,54 +40,78 @@ int set_affinity(pid_t pid, int cpu) {
 
 	// Set pid's CPU affinity mask
 	if (sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset) == -1) {
-		fprintf(stderr, "Error: sched_setaffinity failed for PID %d with CPU %d: %s\n",
+		TTSCHED_LOG_ERROR("sched_setaffinity failed for PID %d with CPU %d: %s",
 			pid, cpu, strerror(errno));
-		return -1;
+		return TTSCHED_ERROR_PERMISSION;
 	}
 
-	printf("Info: Successfully set CPU affinity for PID %d to CPU %d\n", pid, cpu);
-	return 0;
+	TTSCHED_LOG_INFO("Successfully set CPU affinity for PID %d to CPU %d", pid, cpu);
+	return TTSCHED_SUCCESS;
 }
 
-static int sched_setattr_tt(pid_t pid, const struct sched_attr_tt *attr,
+static int set_sched_attr_syscall(pid_t pid, const struct sched_attr_tt *attr,
 			unsigned int flags)
 {
 	return syscall(SYS_sched_setattr, pid, attr, flags);
 }
 
-int set_schedattr(pid_t pid, unsigned int priority, unsigned int policy) {
+ttsched_error_t set_schedattr(pid_t pid, unsigned int priority, unsigned int policy) {
 	struct sched_attr_tt attr;
+
+	// 입력 인자 검증
+	if (priority > 99) {
+		TTSCHED_LOG_ERROR("Invalid priority %u (must be <= 99)", priority);
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	if (policy != SCHED_NORMAL && policy != SCHED_FIFO && policy != SCHED_RR) {
+		TTSCHED_LOG_ERROR("Invalid policy %u", policy);
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
 
 	memset(&attr, 0, sizeof(attr));
 	attr.size = sizeof(struct sched_attr_tt);
 	attr.sched_priority = priority;
 	attr.sched_policy = policy;
 
-	if (sched_setattr_tt(pid, &attr, 0) == -1) {
-		perror("Error calling sched_setattr.");
-		return -1;
+	if (set_sched_attr_syscall(pid, &attr, 0) == -1) {
+		TTSCHED_LOG_ERROR("sched_setattr failed for PID %d: %s", pid, strerror(errno));
+		return TTSCHED_ERROR_PERMISSION;
 	}
-	return 0;
+	TTSCHED_LOG_INFO("Successfully set scheduling attributes for PID %d (priority=%u, policy=%u)",
+		pid, priority, policy);
+	return TTSCHED_SUCCESS;
 }
 
-void get_process_name_by_pid(const int pid, char name[])
+ttsched_error_t get_process_name_by_pid(const int pid, char name[])
 {
-	if (name) {
-		char procpath[60] = {};
-
-		sprintf(procpath, "/proc/%d/comm",pid);
-
-		FILE* f = fopen(procpath,"r");
-		if (f) {
-			size_t size;
-			size = fread(name, sizeof(char), PROCESS_NAME_SIZE, f);
-			if (size > 0) {
-				if ('\n' == name[size-1])
-					name[size-1] = '\0';
-			}
-			fclose(f);
-		}
+	if (!name) {
+		TTSCHED_LOG_ERROR("Invalid name buffer pointer");
+		return TTSCHED_ERROR_INVALID_ARGS;
 	}
+
+	if (pid <= 0) {
+		TTSCHED_LOG_ERROR("Invalid PID %d", pid);
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	char procpath[60] = {};
+	sprintf(procpath, "/proc/%d/comm", pid);
+
+	FILE* f = fopen(procpath, "r");
+	if (!f) {
+		TTSCHED_LOG_ERROR("Failed to open %s: %s", procpath, strerror(errno));
+		return TTSCHED_ERROR_SYSTEM;
+	}
+
+	size_t size = fread(name, sizeof(char), PROCESS_NAME_SIZE, f);
+	if (size > 0) {
+		if ('\n' == name[size-1])
+			name[size-1] = '\0';
+	}
+	fclose(f);
+
+	return TTSCHED_SUCCESS;
 }
 
 static void get_thread_name(pid_t pid, pid_t tid, char *name, size_t len)
@@ -106,7 +134,7 @@ static void get_thread_name(pid_t pid, pid_t tid, char *name, size_t len)
 	}
 }
 
-static int list_threads(const char *name, int pid)
+static int find_threads_by_name(const char *name, int pid)
 {
 	int ret = -1;
 	char path[256];
@@ -137,69 +165,103 @@ static int list_threads(const char *name, int pid)
 	return ret;
 }
 
-int get_pid_by_name(const char *name)
+ttsched_error_t get_pid_by_name(const char *name, int *pid)
 {
-	int ret = -1;
+	if (!name || !pid) {
+		TTSCHED_LOG_ERROR("Invalid name or pid pointer");
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	*pid = -1;
 
 	DIR *proc_dir = opendir("/proc");
 	if (!proc_dir) {
-		perror("failed to open /proc");
-		return -1;
+		TTSCHED_LOG_ERROR("Failed to open /proc: %s", strerror(errno));
+		return TTSCHED_ERROR_SYSTEM;
 	}
 
 	struct dirent *entry;
 	while ((entry = readdir(proc_dir)) != NULL) {
 		if (entry->d_type == DT_DIR) {
-			int pid = atoi(entry->d_name);
-			if (pid > 0) {	// Skip '.' and '..' and non-numeric entries
-				ret = list_threads(name, pid);
-				if (ret != -1) {
+			int current_pid = atoi(entry->d_name);
+			if (current_pid > 0) {	// Skip '.' and '..' and non-numeric entries
+				int tid = find_threads_by_name(name, current_pid);
+				if (tid != -1) {
+					*pid = tid;
 					break;
 				}
 			}
 		}
 	}
 	closedir(proc_dir);
-	return ret;
+
+	if (*pid == -1) {
+		TTSCHED_LOG_WARNING("Process with name '%s' not found", name);
+		return TTSCHED_ERROR_SYSTEM;
+	}
+
+	return TTSCHED_SUCCESS;
 }
 
-static int pidfd_open_tt(pid_t pid, unsigned int flags)
+static int open_pidfd_syscall(pid_t pid, unsigned int flags)
 {
 	return syscall(SYS_pidfd_open, pid, flags);
 }
 
-static int pidfd_send_signal_tt(int pidfd, int sig, siginfo_t *info, unsigned int flags)
+static int send_signal_pidfd_syscall(int pidfd, int sig, siginfo_t *info, unsigned int flags)
 {
 	return syscall(SYS_pidfd_send_signal, pidfd, sig, info, flags);
 }
 
-int create_pidfd(pid_t pid)
+ttsched_error_t create_pidfd(pid_t pid, int *pidfd)
 {
-	int pidfd = pidfd_open_tt(pid, 0);
-	if (pidfd < 0) {
-		perror("pidfd_open failed");
-		return -1;
+	if (!pidfd) {
+		TTSCHED_LOG_ERROR("Invalid pidfd pointer");
+		return TTSCHED_ERROR_INVALID_ARGS;
 	}
-	return pidfd;
+
+	if (pid <= 0) {
+		TTSCHED_LOG_ERROR("Invalid PID %d", pid);
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	*pidfd = open_pidfd_syscall(pid, 0);
+	if (*pidfd < 0) {
+		TTSCHED_LOG_ERROR("pidfd_open failed for PID %d: %s", pid, strerror(errno));
+		return TTSCHED_ERROR_PERMISSION;
+	}
+	return TTSCHED_SUCCESS;
 }
 
-int send_signal_pidfd(int pidfd, int signal)
+ttsched_error_t send_signal_pidfd(int pidfd, int signal)
 {
-	int ret = pidfd_send_signal_tt(pidfd, signal, NULL, 0);
+	if (pidfd < 0) {
+		TTSCHED_LOG_ERROR("Invalid pidfd %d", pidfd);
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	int ret = send_signal_pidfd_syscall(pidfd, signal, NULL, 0);
 	if (ret < 0) {
-		perror("pidfd_send_signal failed");
-		return ret;
+		TTSCHED_LOG_ERROR("pidfd_send_signal failed: %s", strerror(errno));
+		return TTSCHED_ERROR_PERMISSION;
 	}
-	return 0;
+	return TTSCHED_SUCCESS;
 }
 
-int is_process_alive(int pidfd)
+ttsched_error_t is_process_alive(int pidfd, int *alive)
 {
+	if (!alive) {
+		TTSCHED_LOG_ERROR("Invalid alive pointer");
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
 	if (pidfd < 0) {
-		return 0;
+		*alive = 0;
+		return TTSCHED_SUCCESS;
 	}
 
 	// Try a null signal to check if process is alive
-	int ret = pidfd_send_signal_tt(pidfd, 0, NULL, 0);
-	return (ret == 0);
+	int ret = send_signal_pidfd_syscall(pidfd, 0, NULL, 0);
+	*alive = (ret == 0) ? 1 : 0;
+	return TTSCHED_SUCCESS;
 }

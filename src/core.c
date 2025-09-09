@@ -164,9 +164,10 @@ void timer_expired_handler(union sigval value)
             task->name, SIGNO_TT, task->pid, ts_ns(after), ( ts_diff(after, before) / NSEC_PER_USEC ));
 
     // Send the signal to the target process
-    if (send_signal_pidfd(task->pidfd, SIGNO_TT) < 0) {
-        TT_LOG_ERROR("Failed to send signal via pidfd to %s (PID %d)",
-            task->name, task->pid);
+    ttsched_error_t signal_result = send_signal_pidfd(task->pidfd, SIGNO_TT);
+    if (signal_result != TTSCHED_SUCCESS) {
+        TT_LOG_ERROR("Failed to send signal via pidfd to %s (PID %d): %s",
+            task->name, task->pid, ttsched_error_string(signal_result));
         // TODO: check if the process is still alive
     }
 
@@ -272,7 +273,7 @@ tt_error_t epoll_loop(struct context *ctx)
 }
 
 #if defined(CONFIG_TRACE_EVENT) || defined(CONFIG_TRACE_BPF_EVENT)
-static void sighan_stoptracer(int signo, siginfo_t *info, void *context)
+static void signal_handler_stop_tracer(int signo, siginfo_t *info, void *context)
 {
     struct timespec now;
     clock_gettime(CLOCK_REALTIME, &now);
@@ -289,7 +290,7 @@ tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *ti
     struct sigaction sa = {};
 
     sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = &sighan_stoptracer;
+    sa.sa_sigaction = &signal_handler_stop_tracer;
     if (sigaction(SIGNO_STOPTRACER, &sa, NULL) == -1) {
         perror("Failed to set up signal handler");
         return TT_ERROR_SIGNAL;
