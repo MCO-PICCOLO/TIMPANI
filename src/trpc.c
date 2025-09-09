@@ -20,14 +20,14 @@ static int init_trpc_connection(const char *addr, int port, sd_bus **dbus_ret, s
     return ret;
 }
 
-static int get_schedinfo(sd_bus *dbus, char *node_id, struct sched_info *sinfo, struct context *ctx)
+static int get_schedinfo(struct context *ctx, struct sched_info *sinfo)
 {
     int ret;
     void *buf = NULL;
     size_t bufsize;
     serial_buf_t *sbuf = NULL;
 
-    ret = trpc_client_schedinfo(dbus, node_id, &buf, &bufsize);
+    ret = trpc_client_schedinfo(ctx->comm.dbus, ctx->config.node_id, &buf, &bufsize);
     if (ret < 0) {
         return ret;
     }
@@ -43,14 +43,14 @@ static int get_schedinfo(sd_bus *dbus, char *node_id, struct sched_info *sinfo, 
     }
     buf = NULL;  // now use sbuf->data
 
-    ret = deserialize_sched_info(sbuf, sinfo, ctx);
+    ret = deserialize_sched_info(ctx, sbuf, sinfo);
 
     free_serial_buf(sbuf);
 
     return ret;
 }
 
-tt_error_t deserialize_sched_info(serial_buf_t *sbuf, struct sched_info *sinfo, struct context *ctx)
+tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struct sched_info *sinfo)
 {
     uint32_t i;
     uint64_t hyperperiod_us = 0;
@@ -113,7 +113,7 @@ tt_error_t deserialize_sched_info(serial_buf_t *sbuf, struct sched_info *sinfo, 
     printf("Hyperperiod: %lu us\n", hyperperiod_us);
 
     // context의 hp_manager에 초기화 (수정된 부분)
-    if (init_hyperperiod(&ctx->hp_manager, workload_id, hyperperiod_us, ctx) != TT_SUCCESS) {
+    if (init_hyperperiod(ctx, workload_id, hyperperiod_us, &ctx->hp_manager) != TT_SUCCESS) {
         fprintf(stderr, "Failed to initialize hyperperiod manager\n");
         destroy_task_list(sinfo->tasks);
         sinfo->tasks = NULL;
@@ -158,8 +158,7 @@ tt_error_t init_trpc(struct context *ctx)
     while (retry_count < TT_MAX_CONNECTION_RETRIES) {
         if (init_trpc_connection(ctx->config.addr, ctx->config.port,
                                 &ctx->comm.dbus, &ctx->comm.event) == 0) {
-            if (get_schedinfo(ctx->comm.dbus, ctx->config.node_id,
-                             &ctx->runtime.sched_info, ctx) == 0) {
+            if (get_schedinfo(ctx, &ctx->runtime.sched_info) == 0) {
                 /* Successfully retrieved schedule info */
                 printf("Successfully connected and retrieved schedule info (attempt %d)\n", retry_count + 1);
                 return TT_SUCCESS;
@@ -190,8 +189,8 @@ tt_error_t sync_timer_with_server(struct context *ctx)
     return TT_SUCCESS;
 }
 
-tt_error_t report_deadline_miss(sd_bus *dbus, char *node_id, const char *taskname)
+tt_error_t report_deadline_miss(struct context *ctx, const char *taskname)
 {
-    int result = trpc_client_dmiss(dbus, node_id, taskname);
+    int result = trpc_client_dmiss(ctx->comm.dbus, ctx->config.node_id, taskname);
     return (result < 0) ? TT_ERROR_NETWORK : TT_SUCCESS;
 }

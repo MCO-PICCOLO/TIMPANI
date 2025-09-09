@@ -1,8 +1,8 @@
 #include "internal.h"
 
-tt_error_t init_hyperperiod(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx)
+tt_error_t init_hyperperiod(struct context *ctx, const char *workload_id, uint64_t hyperperiod_us, struct hyperperiod_manager *hp_mgr)
 {
-    if (!hp_mgr || !workload_id || !ctx) {
+    if (!ctx || !workload_id || !hp_mgr) {
         return TT_ERROR_CONFIG;
     }
 

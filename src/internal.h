@@ -173,7 +173,7 @@ tt_error_t handle_sigwait_bpf_event(void *ctx, void *data, size_t len);
 tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len);
 
 // ===== 하이퍼피리어드 관리 (hyperperiod.c) =====
-tt_error_t init_hyperperiod(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx);
+tt_error_t init_hyperperiod(struct context *ctx, const char *workload_id, uint64_t hyperperiod_us, struct hyperperiod_manager *hp_mgr);
 void hyperperiod_cycle_handler(union sigval value);
 uint64_t get_hyperperiod_relative_time(const struct hyperperiod_manager *hp_mgr);
 void log_hyperperiod_statistics(const struct hyperperiod_manager *hp_mgr);
@@ -186,8 +186,8 @@ void destroy_task_list(struct task_info *tasks);
 // ===== 네트워크 통신 (trpc.c) =====
 tt_error_t init_trpc(struct context *ctx);
 tt_error_t sync_timer_with_server(struct context *ctx);
-tt_error_t deserialize_sched_info(serial_buf_t *sbuf, struct sched_info *sinfo, struct context *ctx);
-tt_error_t report_deadline_miss(sd_bus *dbus, char *node_id, const char *taskname);
+tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struct sched_info *sinfo);
+tt_error_t report_deadline_miss(struct context *ctx, const char *taskname);
 
 // ===== 시그널 처리 (signal.c) =====
 tt_error_t setup_signal_handlers(struct context *ctx);

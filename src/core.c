@@ -118,7 +118,7 @@ void timer_expired_handler(union sigval value)
                 task->name, task->pid, deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_deadline_miss(ctx->comm.dbus, ctx->config.node_id, task->name);
+            report_deadline_miss(ctx, task->name);
         // Check if this task meets the deadline
         } else if (tt_node->sigwait_ts > deadline_ns) {
             printf("!!! DEADLINE MISS %s(%d): %lu > deadline %lu !!!\n",
@@ -127,7 +127,7 @@ void timer_expired_handler(union sigval value)
                 task->name, tt_node->sigwait_ts - deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_deadline_miss(ctx->comm.dbus, ctx->config.node_id, task->name);
+            report_deadline_miss(ctx, task->name);
         // Check if this task is stuck at kernel sigwait syscall handler
         } else if (tt_node->sigwait_ts == tt_node->sigwait_ts_prev) {
             printf("!!! DEADLINE MISS: STUCK AT KERNEL %s(%d): %lu & deadline %lu !!!\n",
@@ -136,7 +136,7 @@ void timer_expired_handler(union sigval value)
                 task->name, tt_node->sigwait_ts - deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_deadline_miss(ctx->comm.dbus, ctx->config.node_id, task->name);
+            report_deadline_miss(ctx, task->name);
         }
 
         tt_node->sigwait_ts_prev = tt_node->sigwait_ts;
