@@ -31,11 +31,11 @@ static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts)
     return bpf_ktime_off + bpf_ts;
 }
 
-int handle_sigwait_bpf_event(void *ctx, void *data, size_t len)
+tt_error_t handle_sigwait_bpf_event(void *ctx, void *data, size_t len)
 {
     // 매개변수 검증
     if (!ctx || !data || len < sizeof(struct sigwait_event)) {
-        return -1;
+        return TT_ERROR_BPF;
     }
 
     struct sigwait_event *e = (struct sigwait_event *)data;
@@ -50,27 +50,27 @@ int handle_sigwait_bpf_event(void *ctx, void *data, size_t len)
         }
     }
 
-    return 0;
+    return TT_SUCCESS;
 }
 #else
 static inline void calibrate_bpf_ktime_offset_internal(void) {}
 static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts) { return bpf_ts; }
-int handle_sigwait_bpf_event(void *ctx, void *data, size_t len) { return 0; }
+tt_error_t handle_sigwait_bpf_event(void *ctx, void *data, size_t len) { return TT_SUCCESS; }
 #endif
 
 #ifdef CONFIG_TRACE_BPF_EVENT
-int handle_schedstat_bpf_event(void *ctx, void *data, size_t len)
+tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len)
 {
     // 매개변수 검증
     if (!ctx || !data || len == 0) {
-        return -1;
+        return TT_ERROR_BPF;
     }
 
     // BPF 이벤트 콜백 구현
-    return 0;
+    return TT_SUCCESS;
 }
 #else
-int handle_schedstat_bpf_event(void *ctx, void *data, size_t len) { return 0; }
+tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len) { return TT_SUCCESS; }
 #endif
 
 void calibrate_bpf_time_offset(void)
@@ -266,7 +266,7 @@ static void sighan_stoptracer(int signo, siginfo_t *info, void *context)
     signal(signo, SIG_IGN);
 }
 
-bool setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
+tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
 {
     struct sigevent sev = {};
     struct itimerspec its = {};
@@ -276,7 +276,7 @@ bool setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
     sa.sa_sigaction = &sighan_stoptracer;
     if (sigaction(SIGNO_STOPTRACER, &sa, NULL) == -1) {
         perror("Failed to set up signal handler");
-        return false;
+        return TT_ERROR_SIGNAL;
     }
 
     sev.sigev_notify = SIGEV_SIGNAL;
@@ -290,19 +290,19 @@ bool setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
 
     if (timer_create(ctx->config.clockid, &sev, timer) == -1) {
         perror("Failed to create timer");
-        return false;
+        return TT_ERROR_TIMER;
     }
 
     if (timer_settime(*timer, TIMER_ABSTIME, &its, NULL) == -1) {
         perror("Failed to set timer period");
-        return false;
+        return TT_ERROR_TIMER;
     }
 
-    return true;
+    return TT_SUCCESS;
 }
 #else
-bool setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
+tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
 {
-    return false;
+    return TT_SUCCESS;  // 추적 기능이 비활성화된 경우에도 성공으로 처리
 }
 #endif
