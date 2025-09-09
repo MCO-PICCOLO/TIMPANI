@@ -1,6 +1,6 @@
 #include "internal.h"
 
-tt_error_t hyperperiod_init(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx)
+tt_error_t init_hyperperiod(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx)
 {
     if (!hp_mgr || !workload_id || !ctx) {
         return TT_ERROR_CONFIG;
@@ -54,11 +54,11 @@ void hyperperiod_cycle_handler(union sigval value)
 
     // Log statistics every interval
     if (hp_mgr->completed_cycles % STATISTICS_LOG_INTERVAL == 0) {
-        hyperperiod_log_statistics(hp_mgr);
+        log_hyperperiod_statistics(hp_mgr);
     }
 }
 
-uint64_t hyperperiod_get_relative_time_us(const struct hyperperiod_manager *hp_mgr)
+uint64_t get_hyperperiod_relative_time(const struct hyperperiod_manager *hp_mgr)
 {
     struct timespec now;
 
@@ -82,7 +82,7 @@ uint64_t hyperperiod_get_relative_time_us(const struct hyperperiod_manager *hp_m
     }
 }
 
-void hyperperiod_log_statistics(const struct hyperperiod_manager *hp_mgr)
+void log_hyperperiod_statistics(const struct hyperperiod_manager *hp_mgr)
 {
     double miss_rate = hp_mgr->completed_cycles > 0 ?
         (double)hp_mgr->total_deadline_misses / hp_mgr->completed_cycles : 0.0;
@@ -97,7 +97,7 @@ void hyperperiod_log_statistics(const struct hyperperiod_manager *hp_mgr)
     printf("==============================\n\n");
 }
 
-tt_error_t hyperperiod_start_timer(struct context *ctx)
+tt_error_t start_hyperperiod_timer(struct context *ctx)
 {
     struct itimerspec its;
     struct sigevent sev;

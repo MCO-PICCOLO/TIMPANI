@@ -31,7 +31,7 @@ static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts)
     return bpf_ktime_off + bpf_ts;
 }
 
-int sigwait_bpf_callback(void *ctx, void *data, size_t len)
+int handle_sigwait_bpf_event(void *ctx, void *data, size_t len)
 {
     // 매개변수 검증
     if (!ctx || !data || len < sizeof(struct sigwait_event)) {
@@ -55,11 +55,11 @@ int sigwait_bpf_callback(void *ctx, void *data, size_t len)
 #else
 static inline void calibrate_bpf_ktime_offset_internal(void) {}
 static inline uint64_t bpf_ktime_to_real(uint64_t bpf_ts) { return bpf_ts; }
-int sigwait_bpf_callback(void *ctx, void *data, size_t len) { return 0; }
+int handle_sigwait_bpf_event(void *ctx, void *data, size_t len) { return 0; }
 #endif
 
 #ifdef CONFIG_TRACE_BPF_EVENT
-int schedstat_bpf_callback(void *ctx, void *data, size_t len)
+int handle_schedstat_bpf_event(void *ctx, void *data, size_t len)
 {
     // 매개변수 검증
     if (!ctx || !data || len == 0) {
@@ -70,16 +70,16 @@ int schedstat_bpf_callback(void *ctx, void *data, size_t len)
     return 0;
 }
 #else
-int schedstat_bpf_callback(void *ctx, void *data, size_t len) { return 0; }
+int handle_schedstat_bpf_event(void *ctx, void *data, size_t len) { return 0; }
 #endif
 
-void calibrate_bpf_ktime_offset(void)
+void calibrate_bpf_time_offset(void)
 {
     calibrate_bpf_ktime_offset_internal();
 }
 
 // 타이머 핸들러 함수
-void timer_handler(union sigval value)
+void timer_expired_handler(union sigval value)
 {
     struct time_trigger *tt_node = (struct time_trigger *)value.sival_ptr;
 
@@ -96,7 +96,7 @@ void timer_handler(union sigval value)
     clock_gettime(ctx->config.clockid, &before);
 
     // Calculate position within hyperperiod
-    hyperperiod_position_us = hyperperiod_get_relative_time_us(&ctx->hp_manager);
+    hyperperiod_position_us = get_hyperperiod_relative_time(&ctx->hp_manager);
 
     write_trace_marker("%s: Timer expired: now: %lld, diff: %lld, hyperperiod_pos: %lu us\n",
             task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer), hyperperiod_position_us);
@@ -118,7 +118,7 @@ void timer_handler(union sigval value)
                 task->name, task->pid, deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_dmiss(ctx->comm.dbus, ctx->config.node_id, task->name);
+            report_deadline_miss(ctx->comm.dbus, ctx->config.node_id, task->name);
         // Check if this task meets the deadline
         } else if (tt_node->sigwait_ts > deadline_ns) {
             printf("!!! DEADLINE MISS %s(%d): %lu > deadline %lu !!!\n",
@@ -127,7 +127,7 @@ void timer_handler(union sigval value)
                 task->name, tt_node->sigwait_ts - deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_dmiss(ctx->comm.dbus, ctx->config.node_id, task->name);
+            report_deadline_miss(ctx->comm.dbus, ctx->config.node_id, task->name);
         // Check if this task is stuck at kernel sigwait syscall handler
         } else if (tt_node->sigwait_ts == tt_node->sigwait_ts_prev) {
             printf("!!! DEADLINE MISS: STUCK AT KERNEL %s(%d): %lu & deadline %lu !!!\n",
@@ -136,7 +136,7 @@ void timer_handler(union sigval value)
                 task->name, tt_node->sigwait_ts - deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
-            report_dmiss(ctx->comm.dbus, ctx->config.node_id, task->name);
+            report_deadline_miss(ctx->comm.dbus, ctx->config.node_id, task->name);
         }
 
         tt_node->sigwait_ts_prev = tt_node->sigwait_ts;
@@ -175,7 +175,7 @@ tt_error_t start_timers(struct context *ctx)
         memset(&its, 0, sizeof(its));
 
         sev.sigev_notify = SIGEV_THREAD;
-        sev.sigev_notify_function = timer_handler;
+        sev.sigev_notify_function = timer_expired_handler;
         sev.sigev_value.sival_ptr = tt_p;
 
         its.it_value.tv_sec = ctx->runtime.starttimer_ts.tv_sec;
@@ -266,7 +266,7 @@ static void sighan_stoptracer(int signo, siginfo_t *info, void *context)
     signal(signo, SIG_IGN);
 }
 
-bool set_stoptracer_timer(struct context *ctx, int duration, timer_t *timer)
+bool setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
 {
     struct sigevent sev = {};
     struct itimerspec its = {};
@@ -301,7 +301,7 @@ bool set_stoptracer_timer(struct context *ctx, int duration, timer_t *timer)
     return true;
 }
 #else
-bool set_stoptracer_timer(struct context *ctx, int duration, timer_t *timer)
+bool setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
 {
     return false;
 }

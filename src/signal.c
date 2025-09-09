@@ -10,7 +10,7 @@ static void signal_handler(int signo)
     }
 }
 
-tt_error_t signal_setup(struct context *ctx)
+tt_error_t setup_signal_handlers(struct context *ctx)
 {
     g_ctx = ctx;
 

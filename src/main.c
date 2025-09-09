@@ -10,7 +10,7 @@ int main(int argc, char *argv[])
     tt_error_t ret;
 
     // 설정 파싱
-    ret = config_parse(argc, argv, &ctx);
+    ret = parse_config(argc, argv, &ctx);
     if (ret != TT_SUCCESS) {
         fprintf(stderr, "Configuration error: %s\n", tt_error_string(ret));
         return EXIT_FAILURE;
@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
     }
 
 cleanup:
-    cleanup_all(&ctx);
+    cleanup_context(&ctx);
     return (ret == TT_SUCCESS) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
@@ -39,7 +39,7 @@ static tt_error_t initialize(struct context *ctx)
     pid_t pid = getpid();
 
     // 시그널 핸들러 설정
-    if (signal_setup(ctx) != TT_SUCCESS) {
+    if (setup_signal_handlers(ctx) != TT_SUCCESS) {
         return TT_ERROR_SIGNAL;
     }
 
@@ -52,19 +52,19 @@ static tt_error_t initialize(struct context *ctx)
     }
 
     // BPF 초기화
-    calibrate_bpf_ktime_offset();
+    calibrate_bpf_time_offset();
 
     // TRPC 초기화 및 스케줄 정보 획득
-    if (trpc_init(ctx) != TT_SUCCESS) {
+    if (init_trpc(ctx) != TT_SUCCESS) {
         fprintf(stderr, "Failed to initialize TRPC and get schedule info\n");
         return TT_ERROR_NETWORK;
     }
 
     // BPF 활성화
-    bpf_on(sigwait_bpf_callback, schedstat_bpf_callback, (void *)&ctx->runtime.tt_list);
+    bpf_on(handle_sigwait_bpf_event, handle_schedstat_bpf_event, (void *)&ctx->runtime.tt_list);
 
     // 태스크 리스트 초기화
-    if (task_list_init(ctx) != TT_SUCCESS) {
+    if (init_task_list(ctx) != TT_SUCCESS) {
         fprintf(stderr, "Failed to initialize time trigger list\n");
         return TT_ERROR_CONFIG;
     }
@@ -78,7 +78,7 @@ static tt_error_t run(struct context *ctx)
     bool settimer = false;
 
     // 타이머 동기화
-    if (trpc_sync_timer(ctx) != TT_SUCCESS) {
+    if (sync_timer_with_server(ctx) != TT_SUCCESS) {
         fprintf(stderr, "Failed to synchronize timers\n");
         return TT_ERROR_NETWORK;
     }
@@ -90,13 +90,13 @@ static tt_error_t run(struct context *ctx)
     }
 
     // 하이퍼피리어드 타이머 시작
-    if (hyperperiod_start_timer(ctx) != TT_SUCCESS) {
+    if (start_hyperperiod_timer(ctx) != TT_SUCCESS) {
         fprintf(stderr, "Failed to start hyperperiod timer\n");
         return TT_ERROR_TIMER;
     }
 
     // 트레이싱 설정 및 활성화
-    settimer = set_stoptracer_timer(ctx, ctx->config.traceduration, &tracetimer);
+    settimer = setup_trace_stop_timer(ctx, ctx->config.traceduration, &tracetimer);
     tracer_on();
 
 #if defined(CONFIG_TRACE_EVENT) || defined(CONFIG_TRACE_BPF_EVENT)

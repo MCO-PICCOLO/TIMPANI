@@ -173,41 +173,41 @@ struct context {
 
 // 각 모듈의 함수 선언들
 // config.c
-tt_error_t config_parse(int argc, char *argv[], struct context *ctx);
-tt_error_t config_validate(const struct context *ctx);
+tt_error_t parse_config(int argc, char *argv[], struct context *ctx);
+tt_error_t validate_config(const struct context *ctx);
 
 // core.c
-void timer_handler(union sigval value);
+void timer_expired_handler(union sigval value);
 tt_error_t start_timers(struct context *ctx);
 tt_error_t epoll_loop(struct context *ctx);
-int sigwait_bpf_callback(void *ctx, void *data, size_t len);
-int schedstat_bpf_callback(void *ctx, void *data, size_t len);
+int handle_sigwait_bpf_event(void *ctx, void *data, size_t len);
+int handle_schedstat_bpf_event(void *ctx, void *data, size_t len);
 
 // hyperperiod.c
-tt_error_t hyperperiod_init(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx);
+tt_error_t init_hyperperiod(struct hyperperiod_manager *hp_mgr, const char *workload_id, uint64_t hyperperiod_us, struct context *ctx);
 void hyperperiod_cycle_handler(union sigval value);
-uint64_t hyperperiod_get_relative_time_us(const struct hyperperiod_manager *hp_mgr);
-void hyperperiod_log_statistics(const struct hyperperiod_manager *hp_mgr);
-tt_error_t hyperperiod_start_timer(struct context *ctx);
+uint64_t get_hyperperiod_relative_time(const struct hyperperiod_manager *hp_mgr);
+void log_hyperperiod_statistics(const struct hyperperiod_manager *hp_mgr);
+tt_error_t start_hyperperiod_timer(struct context *ctx);
 
 // task.c
-tt_error_t task_list_init(struct context *ctx);
-void free_task_list(struct task_info *tasks);
+tt_error_t init_task_list(struct context *ctx);
+void destroy_task_list(struct task_info *tasks);
 
 // trpc.c
-tt_error_t trpc_init(struct context *ctx);
-tt_error_t trpc_sync_timer(struct context *ctx);
-int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo, struct context *ctx);
-int report_dmiss(sd_bus *dbus, char *node_id, const char *taskname);
+tt_error_t init_trpc(struct context *ctx);
+tt_error_t sync_timer_with_server(struct context *ctx);
+int deserialize_sched_info(serial_buf_t *sbuf, struct sched_info *sinfo, struct context *ctx);
+int report_deadline_miss(sd_bus *dbus, char *node_id, const char *taskname);
 
 // signal.c
-tt_error_t signal_setup(struct context *ctx);
+tt_error_t setup_signal_handlers(struct context *ctx);
 
 // cleanup.c
-void cleanup_all(struct context *ctx);
+void cleanup_context(struct context *ctx);
 
 // 유틸리티 함수들
-void calibrate_bpf_ktime_offset(void);
-bool set_stoptracer_timer(struct context *ctx, int duration, timer_t *timer);
+void calibrate_bpf_time_offset(void);
+bool setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer);
 
 #endif /* _INTERNAL_H */

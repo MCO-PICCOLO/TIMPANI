@@ -1,6 +1,6 @@
 #include "internal.h"
 
-void free_task_list(struct task_info *tasks)
+void destroy_task_list(struct task_info *tasks)
 {
     struct task_info *current = tasks;
     while (current) {
@@ -57,7 +57,7 @@ static tt_error_t task_setup_process(struct time_trigger *tt_node)
     return TT_SUCCESS;
 }
 
-tt_error_t task_list_init(struct context *ctx)
+tt_error_t init_task_list(struct context *ctx)
 {
     int success_count = 0;
 

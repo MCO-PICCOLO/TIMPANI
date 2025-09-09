@@ -34,7 +34,7 @@ static void print_usage(const char *program_name)
             program_name);
 }
 
-tt_error_t config_parse(int argc, char *argv[], struct context *ctx)
+tt_error_t parse_config(int argc, char *argv[], struct context *ctx)
 {
     config_set_defaults(ctx);
 
@@ -74,10 +74,10 @@ tt_error_t config_parse(int argc, char *argv[], struct context *ctx)
         ctx->config.addr = argv[optind++];
     }
 
-    return config_validate(ctx);
+    return validate_config(ctx);
 }
 
-tt_error_t config_validate(const struct context *ctx)
+tt_error_t validate_config(const struct context *ctx)
 {
     // 우선순위 검증
     if (ctx->config.prio < -1 || ctx->config.prio > 99) {

@@ -5,7 +5,7 @@ static void cleanup_communication(struct context *ctx);
 static void cleanup_hyperperiod(struct context *ctx);
 static void cleanup_bpf_trace(void);
 
-void cleanup_all(struct context *ctx)
+void cleanup_context(struct context *ctx)
 {
     if (!ctx) return;
 
@@ -51,7 +51,7 @@ static void cleanup_tasks(struct context *ctx)
     }
 
     // 스케줄 정보의 태스크 리스트 정리
-    free_task_list(ctx->runtime.sched_info.tasks);
+    destroy_task_list(ctx->runtime.sched_info.tasks);
     ctx->runtime.sched_info.tasks = NULL;
 }
 
@@ -72,7 +72,7 @@ static void cleanup_hyperperiod(struct context *ctx)
 {
     if (ctx->hp_manager.hyperperiod_us > 0) {
         timer_delete(ctx->hp_manager.hyperperiod_timer);
-        hyperperiod_log_statistics(&ctx->hp_manager);
+        log_hyperperiod_statistics(&ctx->hp_manager);
     }
 }
 

@@ -43,14 +43,14 @@ static int get_schedinfo(sd_bus *dbus, char *node_id, struct sched_info *sinfo, 
     }
     buf = NULL;  // now use sbuf->data
 
-    ret = deserialize_schedinfo(sbuf, sinfo, ctx);
+    ret = deserialize_sched_info(sbuf, sinfo, ctx);
 
     free_serial_buf(sbuf);
 
     return ret;
 }
 
-int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo, struct context *ctx)
+int deserialize_sched_info(serial_buf_t *sbuf, struct sched_info *sinfo, struct context *ctx)
 {
     uint32_t i;
     uint64_t hyperperiod_us = 0;
@@ -68,7 +68,7 @@ int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo, struct c
         struct task_info *tinfo = malloc(sizeof(struct task_info));
         if (tinfo == NULL) {
             fprintf(stderr, "Failed to allocate memory for task_info\n");
-            free_task_list(sinfo->tasks);
+            destroy_task_list(sinfo->tasks);
             sinfo->tasks = NULL;
             return -1;
         }
@@ -85,7 +85,7 @@ int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo, struct c
             deserialize_str(sbuf, tinfo->name) < 0) {
             fprintf(stderr, "Failed to deserialize task_info fields\n");
             free(tinfo);
-            free_task_list(sinfo->tasks);
+            destroy_task_list(sinfo->tasks);
             sinfo->tasks = NULL;
             return -1;
         }
@@ -104,7 +104,7 @@ int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo, struct c
     if (deserialize_str(sbuf, workload_id) < 0 ||
         deserialize_int64_t(sbuf, &hyperperiod_us) < 0) {
         fprintf(stderr, "Failed to deserialize workload info\n");
-        free_task_list(sinfo->tasks);
+        destroy_task_list(sinfo->tasks);
         sinfo->tasks = NULL;
         return -1;
     }
@@ -113,9 +113,9 @@ int deserialize_schedinfo(serial_buf_t *sbuf, struct sched_info *sinfo, struct c
     printf("Hyperperiod: %lu us\n", hyperperiod_us);
 
     // context의 hp_manager에 초기화 (수정된 부분)
-    if (hyperperiod_init(&ctx->hp_manager, workload_id, hyperperiod_us, ctx) != TT_SUCCESS) {
+    if (init_hyperperiod(&ctx->hp_manager, workload_id, hyperperiod_us, ctx) != TT_SUCCESS) {
         fprintf(stderr, "Failed to initialize hyperperiod manager\n");
-        free_task_list(sinfo->tasks);
+        destroy_task_list(sinfo->tasks);
         sinfo->tasks = NULL;
         return -1;
     }
@@ -150,7 +150,7 @@ static int sync_timer_internal(sd_bus *dbus, char *node_id, struct timespec *ts_
     return 0;
 }
 
-tt_error_t trpc_init(struct context *ctx)
+tt_error_t init_trpc(struct context *ctx)
 {
     int retry_count = 0;
 
@@ -176,7 +176,7 @@ tt_error_t trpc_init(struct context *ctx)
     return TT_ERROR_NETWORK;
 }
 
-tt_error_t trpc_sync_timer(struct context *ctx)
+tt_error_t sync_timer_with_server(struct context *ctx)
 {
     if (!ctx->config.enable_sync) {
         return TT_SUCCESS;
@@ -190,7 +190,7 @@ tt_error_t trpc_sync_timer(struct context *ctx)
     return TT_SUCCESS;
 }
 
-int report_dmiss(sd_bus *dbus, char *node_id, const char *taskname)
+int report_deadline_miss(sd_bus *dbus, char *node_id, const char *taskname)
 {
     return trpc_client_dmiss(dbus, node_id, taskname);
 }
