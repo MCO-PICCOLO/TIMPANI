@@ -14,6 +14,7 @@
 #include <sys/queue.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <sys/epoll.h>
 
 #include "timetrigger.h"
 #include "schedinfo.h"

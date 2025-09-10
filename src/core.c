@@ -248,26 +248,30 @@ tt_error_t epoll_loop(struct context *ctx)
     while (!ctx->runtime.shutdown_requested) {
         struct epoll_event events[1];
         int count = epoll_wait(efd, events, 1, -1);
+
         if (count < 0) {
             if (errno == EINTR) {
-                // Ctrl+C pressed or a signal received
-                break;
+                // Signal received - just continue, shutdown_requested will be checked at loop condition
+                continue;
             }
             perror("epoll_wait failed");
             close(efd);
             return TT_ERROR_TIMER;
         }
 
+        // Handle process termination events
+        struct time_trigger *tt_p;
         LIST_FOREACH(tt_p, &ctx->runtime.tt_list, entry) {
             if (tt_p->task.pidfd == events[0].data.fd) {
                 // Handle task termination
-                printf("Task %s(%d) terminated\n",
-                    tt_p->task.name, tt_p->task.pid);
+                TT_LOG_INFO("Task %s(%d) terminated", tt_p->task.name, tt_p->task.pid);
                 epoll_ctl(efd, EPOLL_CTL_DEL, tt_p->task.pidfd, NULL);
                 // TODO: Recovery from task termination
+                break;
             }
         }
     }
+
     close(efd);
     return TT_SUCCESS;
 }
@@ -291,6 +295,10 @@ tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *ti
 
     sa.sa_flags = SA_SIGINFO;
     sa.sa_sigaction = &signal_handler_stop_tracer;
+    sigemptyset(&sa.sa_mask);
+    // 다른 시그널들을 마스크하여 간섭 방지
+    sigaddset(&sa.sa_mask, SIGINT);
+    sigaddset(&sa.sa_mask, SIGTERM);
     if (sigaction(SIGNO_STOPTRACER, &sa, NULL) == -1) {
         perror("Failed to set up signal handler");
         return TT_ERROR_SIGNAL;

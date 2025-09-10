@@ -6,8 +6,11 @@ static tt_error_t run(struct context *ctx);
 
 int main(int argc, char *argv[])
 {
-    struct context ctx = {0};
+    struct context ctx;
     tt_error_t ret;
+
+    // 구조체 명시적 초기화
+    memset(&ctx, 0, sizeof(ctx));
 
     // 설정 파싱
     ret = parse_config(argc, argv, &ctx);

@@ -67,7 +67,7 @@ tt_error_t init_task_list(struct context *ctx)
 {
     int success_count = 0;
 
-    LIST_INIT(&ctx->runtime.tt_list);
+    // LIST_INIT는 config_set_defaults에서 이미 호출됨
 
     for (struct task_info *ti = ctx->runtime.sched_info.tasks; ti; ti = ti->next) {
         if (strcmp(ctx->config.node_id, ti->node_id) != 0) {

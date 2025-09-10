@@ -5,6 +5,7 @@ static struct context *g_ctx = NULL;
 static void signal_handler(int signo)
 {
     if (g_ctx) {
+        // 시그널 마스크로 SIGNO_STOPTRACER는 이미 차단되므로 별도 체크 불필요
         g_ctx->runtime.shutdown_requested = 1;
         write_trace_marker("Shutdown signal received: %d\n", signo);
     }
@@ -17,6 +18,8 @@ tt_error_t setup_signal_handlers(struct context *ctx)
     struct sigaction sa;
     sa.sa_handler = signal_handler;
     sigemptyset(&sa.sa_mask);
+    // SIGNO_STOPTRACER를 마스크에 추가하여 signal_handler 실행 중 간섭 방지
+    sigaddset(&sa.sa_mask, SIGNO_STOPTRACER);
     sa.sa_flags = 0;
 
     if (sigaction(SIGINT, &sa, NULL) < 0) {

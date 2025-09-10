@@ -7,6 +7,10 @@ static void config_set_defaults(struct context *ctx)
         return;
     }
 
+    // 런타임 상태 명시적 초기화
+    ctx->runtime.shutdown_requested = 0;
+    LIST_INIT(&ctx->runtime.tt_list);
+
     ctx->config.cpu = -1;
     ctx->config.prio = -1;
     ctx->config.port = 7777;
