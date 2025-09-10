@@ -75,7 +75,7 @@ static tt_error_t initialize(struct context *ctx)
     }
 
     // BPF 활성화
-    bpf_on(handle_sigwait_bpf_event, handle_schedstat_bpf_event, (void *)&ctx->runtime.tt_list);
+    bpf_on(handle_sigwait_bpf_event, handle_schedstat_bpf_event, (void *)ctx);
 
     // 태스크 리스트 초기화
     if (init_task_list(ctx) != TT_SUCCESS) {

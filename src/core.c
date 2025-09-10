@@ -49,7 +49,8 @@ tt_error_t handle_sigwait_bpf_event(void *ctx, void *data, size_t len)
     }
 
     struct sigwait_event *e = (struct sigwait_event *)data;
-    struct listhead *lh_p = (struct listhead *)ctx;
+    struct context *ctx_struct = (struct context *)ctx;
+    struct listhead *lh_p = (struct listhead *)&ctx_struct->runtime.tt_list;
     struct time_trigger *tt_p;
 
     LIST_FOREACH(tt_p, lh_p, entry) {
@@ -69,6 +70,52 @@ tt_error_t handle_sigwait_bpf_event(void *ctx, void *data, size_t len) { return 
 #endif
 
 #ifdef CONFIG_TRACE_BPF_EVENT
+#define SCHEDSTAT_NS_TO_US(ns) (((ns) + (1000 - 1)) / 1000)
+
+static void write_schedstat(struct context *ctx, struct schedstat_event *e, const char *tname)
+{
+	static FILE *file;
+	uint64_t ts_wakeup, ts_start, ts_stop;
+
+	/* Check if trace stop timer is expired */
+	if (ctx->config.traceduration == 0) {
+		ctx->config.enable_plot = 0;
+		if (file) {
+			fclose(file);
+			file = NULL;
+		}
+		return;
+	}
+
+	// Check if the file is not opened yet
+	if (!file) {
+		char fname[128];
+
+		snprintf(fname, sizeof(fname), "%s.gpdata", ctx->config.node_id);
+		file = fopen(fname, "w+");
+		if (file == NULL) {
+			ctx->config.enable_plot = 0;
+			return;
+		}
+	}
+
+	// Convert monotonic ktime to realtime
+	ts_wakeup = bpf_ktime_to_real(e->ts_wakeup);
+	ts_start = bpf_ktime_to_real(e->ts_start);
+	ts_stop = bpf_ktime_to_real(e->ts_stop);
+
+        // Convert ns timestamps to us timestamps in a round up manner
+	ts_wakeup = SCHEDSTAT_NS_TO_US(ts_wakeup);
+	ts_start = SCHEDSTAT_NS_TO_US(ts_start);
+	ts_stop = SCHEDSTAT_NS_TO_US(ts_stop);
+
+	// Column formatting:
+	// task event ignored resource priority activate start stop ignored
+	// NOTE: Compatible with legacy gnuplot script
+	fprintf(file, "%-16s 0 0 %s-C%d 0 %lu %lu %lu 0\n",
+		tname, ctx->config.node_id, e->cpu, ts_wakeup, ts_start, ts_stop);
+}
+
 tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len)
 {
     // 매개변수 검증
@@ -76,7 +123,27 @@ tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len)
         return TT_ERROR_BPF;
     }
 
-    // BPF 이벤트 콜백 구현
+    struct schedstat_event *e = (struct schedstat_event *)data;
+    struct context *ctx_struct = (struct context *)ctx;
+    struct listhead *lh_p = (struct listhead *)&ctx_struct->runtime.tt_list;
+    struct time_trigger *tt_p;
+
+    uint64_t runtime, latency;
+
+    runtime = (e->ts_stop - e->ts_start) / NSEC_PER_USEC;
+    latency = (e->ts_start - e->ts_wakeup) / NSEC_PER_USEC;
+
+    LIST_FOREACH(tt_p, lh_p, entry) {
+        if (tt_p->task.pid == e->pid) {
+            printf("%-16s(%7d): CPU%d\truntime(%8lu us)\tlatency(%lu us)\n",
+                   tt_p->task.name, e->pid, e->cpu, runtime, latency);
+            break;
+        }
+    }
+
+    if (ctx_struct->config.enable_plot && tt_p != NULL)
+        write_schedstat(ctx_struct, e, tt_p->task.name);
+
     return TT_SUCCESS;
 }
 #else
@@ -283,6 +350,8 @@ static void signal_handler_stop_tracer(int signo, siginfo_t *info, void *context
     clock_gettime(CLOCK_REALTIME, &now);
     write_trace_marker("Stop Tracer: %lld \n", ts_ns(now));
     tracer_off();
+    struct context *ctx = info->si_value.sival_ptr;
+    ctx->config.traceduration = 0;
     printf("tracer_off!!!: %ld\n", ts_ns(now));
     signal(signo, SIG_IGN);
 }
@@ -306,6 +375,7 @@ tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *ti
 
     sev.sigev_notify = SIGEV_SIGNAL;
     sev.sigev_signo = SIGNO_STOPTRACER;
+    sev.sigev_value.sival_ptr = ctx;
 
     // context를 통해 starttimer_ts에 접근
     its.it_value.tv_sec = ctx->runtime.starttimer_ts.tv_sec + duration;
