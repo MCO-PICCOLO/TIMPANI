@@ -43,7 +43,7 @@ set(TIMETRIGGER_SOURCES
 	src/trpc.c
 	src/signal.c
 	src/cleanup.c
-	src/sched_internal.c
+	src/sched.c
 )
 
 # Add BPF tracing sources based on configuration
