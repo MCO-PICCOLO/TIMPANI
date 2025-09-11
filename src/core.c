@@ -134,7 +134,7 @@ tt_error_t handle_schedstat_bpf_event(void *ctx, void *data, size_t len)
 
     LIST_FOREACH(tt_p, lh_p, entry) {
         if (tt_p->task.pid == e->pid) {
-            printf("%-16s(%7d): CPU%d\truntime(%8lu us)\tlatency(%lu us)\n",
+            TT_LOG_DEBUG("%-16s(%7d): CPU%d\truntime(%8lu us)\tlatency(%lu us)",
                    tt_p->task.name, e->pid, e->cpu, runtime, latency);
             break;
         }
@@ -174,7 +174,7 @@ void timer_expired_handler(union sigval value)
     // Calculate position within hyperperiod
     hyperperiod_position_us = get_hyperperiod_relative_time(&ctx->hp_manager);
 
-    TT_LOG_DEBUG("%s: Timer expired: now: %lld, diff: %lld, hyperperiod_pos: %lu us",
+    TT_LOG_TIMER("%s: Timer expired: now: %lld, diff: %lld, hyperperiod_pos: %lu us",
             task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer), hyperperiod_position_us);
 
     // If a task has its own release time, do nanosleep
@@ -190,7 +190,7 @@ void timer_expired_handler(union sigval value)
 
         // Check if this task is still running
         if (!tt_node->sigwait_enter) {
-            printf("!!! DEADLINE MISS: STILL OVERRUN %s(%d): deadline %lu !!!\n",
+            TT_LOG_ERROR("!!! DEADLINE MISS: STILL OVERRUN %s(%d): deadline %lu !!!",
                 task->name, task->pid, deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
@@ -199,7 +199,7 @@ void timer_expired_handler(union sigval value)
             }
         // Check if this task meets the deadline
         } else if (tt_node->sigwait_ts > deadline_ns) {
-            printf("!!! DEADLINE MISS %s(%d): %lu > deadline %lu !!!\n",
+            TT_LOG_ERROR("!!! DEADLINE MISS %s(%d): %lu > deadline %lu !!!",
                 task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
             TT_LOG_ERROR("%s: Deadline miss: %lu diff",
                 task->name, tt_node->sigwait_ts - deadline_ns);
@@ -210,7 +210,7 @@ void timer_expired_handler(union sigval value)
             }
         // Check if this task is stuck at kernel sigwait syscall handler
         } else if (tt_node->sigwait_ts == tt_node->sigwait_ts_prev) {
-            printf("!!! DEADLINE MISS: STUCK AT KERNEL %s(%d): %lu & deadline %lu !!!\n",
+            TT_LOG_ERROR("!!! DEADLINE MISS: STUCK AT KERNEL %s(%d): %lu & deadline %lu !!!",
                 task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
             TT_LOG_ERROR("%s: Deadline miss (stuck): %lu diff",
                 task->name, tt_node->sigwait_ts - deadline_ns);
@@ -226,7 +226,7 @@ void timer_expired_handler(union sigval value)
 #endif
 
     clock_gettime(ctx->config.clockid, &after);
-    TT_LOG_DEBUG("%s: Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us",
+    TT_LOG_TIMER("%s: Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us",
             task->name, SIGNO_TT, task->pid, ts_ns(after), ( ts_diff(after, before) / NSEC_PER_USEC ));
 
     // Send the signal to the target process
@@ -266,7 +266,7 @@ tt_error_t start_timers(struct context *ctx)
         its.it_interval.tv_sec = tt_p->task.period / USEC_PER_SEC;
         its.it_interval.tv_nsec = tt_p->task.period % USEC_PER_SEC * NSEC_PER_USEC;
 
-        printf("%s(%d) period: %d starttimer_ts: %ld interval: %lds %ldns\n",
+        TT_LOG_DEBUG("%s(%d) period: %d starttimer_ts: %ld interval: %lds %ldns",
                 tt_p->task.name, tt_p->task.pid,
                 tt_p->task.period, ts_ns(its.it_value),
                 its.it_interval.tv_sec, its.it_interval.tv_nsec);
@@ -296,7 +296,7 @@ tt_error_t epoll_loop(struct context *ctx)
 
     struct time_trigger *tt_p;
     LIST_FOREACH(tt_p, &ctx->runtime.tt_list, entry) {
-        printf("TT will wake up Process %s(%d) with duration %d us, release_time %d, allowable_deadline_misses: %d\n",
+        TT_LOG_INFO("TT will wake up Process %s(%d) with duration %d us, release_time %d, allowable_deadline_misses: %d",
             tt_p->task.name, tt_p->task.pid, tt_p->task.period, tt_p->task.release_time, tt_p->task.allowable_deadline_misses);
 
         struct epoll_event event;

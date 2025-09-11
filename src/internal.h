@@ -99,18 +99,60 @@ static inline int bpf_del_pid(int pid) { return 0; }
 // 로깅 및 통계 상수
 #define TT_STATISTICS_LOG_INTERVAL   100                 // 통계 로그 출력 주기 (하이퍼피리어드 사이클 기준)
 
-// 에러 로깅 매크로
+// ===== 로그 레벨 시스템 =====
+typedef enum {
+    TT_LOG_LEVEL_SILENT = 0,     // 로그 출력 없음
+    TT_LOG_LEVEL_ERROR = 1,      // 에러만
+    TT_LOG_LEVEL_WARNING = 2,    // 경고 이상
+    TT_LOG_LEVEL_INFO = 3,       // 정보 이상 (기본값)
+    TT_LOG_LEVEL_DEBUG = 4,      // 모든 로그
+    TT_LOG_LEVEL_VERBOSE = 5     // 매우 상세한 로그 (성능 영향)
+} tt_log_level_t;
+
+// 전역 로그 레벨 (기본값: INFO)
+extern tt_log_level_t tt_global_log_level;
+
+// 로그 레벨 설정 함수
+static inline void tt_set_log_level(tt_log_level_t level) {
+    tt_global_log_level = level;
+}
+
+// 개선된 로깅 매크로
 #define TT_LOG_ERROR(fmt, ...) \
-    fprintf(stderr, "[ERROR] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+    do { \
+        if (tt_global_log_level >= TT_LOG_LEVEL_ERROR) { \
+            fprintf(stderr, "[ERROR] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__); \
+        } \
+    } while(0)
 
 #define TT_LOG_WARNING(fmt, ...) \
-    fprintf(stderr, "[WARNING] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+    do { \
+        if (tt_global_log_level >= TT_LOG_LEVEL_WARNING) { \
+            fprintf(stderr, "[WARNING] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__); \
+        } \
+    } while(0)
 
 #define TT_LOG_INFO(fmt, ...) \
-    printf("[INFO] " fmt "\n", ##__VA_ARGS__)
+    do { \
+        if (tt_global_log_level >= TT_LOG_LEVEL_INFO) { \
+            printf("[INFO] " fmt "\n", ##__VA_ARGS__); \
+        } \
+    } while(0)
 
 #define TT_LOG_DEBUG(fmt, ...) \
-    printf("[DEBUG] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__)
+    do { \
+        if (tt_global_log_level >= TT_LOG_LEVEL_DEBUG) { \
+            printf("[DEBUG] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__); \
+        } \
+    } while(0)
+
+// 타이머 핸들러용 고성능 로깅 (빈번한 호출 시 성능 최적화)
+#define TT_LOG_TIMER(fmt, ...) \
+    do { \
+        if (unlikely(tt_global_log_level >= TT_LOG_LEVEL_VERBOSE)) { \
+            printf("[TIMER] %s:%d: " fmt "\n", __func__, __LINE__, ##__VA_ARGS__); \
+        } \
+    } while(0)
 
 #define TT_CHECK_ERROR(expr, error_code, fmt, ...) \
     do { \
@@ -261,6 +303,7 @@ struct context {
         bool enable_sync;               // 타이머 동기화 활성화
         bool enable_plot;               // 플롯 기능 활성화
         clockid_t clockid;              // 사용할 클록 타입
+        tt_log_level_t log_level;       // 로그 레벨
     } config;
 
     // 런타임 상태 (실행 중 변경되는 동적 상태)

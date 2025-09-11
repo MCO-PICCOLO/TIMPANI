@@ -20,6 +20,7 @@ static void config_set_defaults(struct context *ctx)
     ctx->config.enable_sync = false;
     ctx->config.enable_plot = false;
     ctx->config.clockid = CLOCK_REALTIME;
+    ctx->config.log_level = TT_LOG_LEVEL_INFO;  // 기본 로그 레벨
 }
 
 static void print_usage(const char *program_name)
@@ -30,6 +31,7 @@ static void print_usage(const char *program_name)
             "  -P <prio>\tRT priority (1~99) for timetrigger\n"
             "  -p <port>\tport to connect to\n"
             "  -n <node id>\tNode ID\n"
+            "  -l <level>\tLog level (0=silent, 1=error, 2=warning, 3=info, 4=debug, 5=verbose)\n"
             "  -s\tEnable timer synchronization across multiple nodes\n"
             "  -g\tEnable saving plot data file by using BPF (<node id>.gpdata)\n"
             "  -h\tshow this help\n",
@@ -41,7 +43,7 @@ tt_error_t parse_config(int argc, char *argv[], struct context *ctx)
     config_set_defaults(ctx);
 
     int opt;
-    while ((opt = getopt(argc, argv, "hc:P:p:n:sg")) >= 0) {
+    while ((opt = getopt(argc, argv, "hc:P:p:n:l:sg")) >= 0) {
         switch (opt) {
         case 'c':
             ctx->config.cpu = atoi(optarg);
@@ -55,6 +57,9 @@ tt_error_t parse_config(int argc, char *argv[], struct context *ctx)
         case 'n':
             strncpy(ctx->config.node_id, optarg, sizeof(ctx->config.node_id) - 1);
             ctx->config.node_id[sizeof(ctx->config.node_id) - 1] = '\0';
+            break;
+        case 'l':
+            ctx->config.log_level = (tt_log_level_t)atoi(optarg);
             break;
         case 's':
             ctx->config.enable_sync = true;
@@ -102,11 +107,21 @@ tt_error_t validate_config(const struct context *ctx)
         return TT_ERROR_CONFIG;
     }
 
+    // 로그 레벨 검증 및 설정
+    if (ctx->config.log_level < TT_LOG_LEVEL_SILENT || ctx->config.log_level > TT_LOG_LEVEL_VERBOSE) {
+        TT_LOG_ERROR("Invalid log level: %d (must be 0-5)", ctx->config.log_level);
+        return TT_ERROR_CONFIG;
+    }
+
+    // 전역 로그 레벨 설정
+    tt_set_log_level(ctx->config.log_level);
+
     TT_LOG_INFO("Configuration:");
     TT_LOG_INFO("  CPU affinity: %d", ctx->config.cpu);
     TT_LOG_INFO("  Priority: %d", ctx->config.prio);
     TT_LOG_INFO("  Server: %s:%d", ctx->config.addr, ctx->config.port);
     TT_LOG_INFO("  Node ID: %s", ctx->config.node_id);
+    TT_LOG_INFO("  Log level: %d", ctx->config.log_level);
     TT_LOG_INFO("  Sync enabled: %s", ctx->config.enable_sync ? "yes" : "no");
     TT_LOG_INFO("  Plot enabled: %s", ctx->config.enable_plot ? "yes" : "no");
 
