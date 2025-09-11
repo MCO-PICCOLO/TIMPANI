@@ -18,10 +18,80 @@
 
 #include "timetrigger.h"
 #include "schedinfo.h"
-#include "libttsched.h"
-#include "libtttrace.h"
 #include <libtrpc.h>
 #include "trace_bpf.h"
+
+// ===== 통합된 스케줄링 함수들 =====
+// 기존 libttsched에서 가져온 함수들
+
+// TTSCHED 에러 코드 시스템
+typedef enum {
+    TTSCHED_SUCCESS = 0,           // 성공
+    TTSCHED_ERROR_INVALID_ARGS = -1, // 잘못된 인자
+    TTSCHED_ERROR_PERMISSION = -2,   // 권한 오류
+    TTSCHED_ERROR_SYSTEM = -3        // 시스템 오류
+} ttsched_error_t;
+
+// 에러 메시지 함수
+static inline const char* ttsched_error_string(ttsched_error_t error)
+{
+    switch (error) {
+        case TTSCHED_SUCCESS: return "Success";
+        case TTSCHED_ERROR_INVALID_ARGS: return "Invalid arguments";
+        case TTSCHED_ERROR_PERMISSION: return "Permission denied";
+        case TTSCHED_ERROR_SYSTEM: return "System error";
+        default: return "Unknown error";
+    }
+}
+
+struct sched_attr_tt {
+    uint32_t size;
+    uint32_t sched_policy;
+    uint64_t sched_flags;
+    int32_t  sched_nice;
+    uint32_t sched_priority;
+    uint64_t sched_runtime;
+    uint64_t sched_deadline;
+    uint64_t sched_period;
+};
+
+// 스케줄링 함수 선언
+ttsched_error_t set_affinity(pid_t pid, int cpu);
+ttsched_error_t set_schedattr(pid_t pid, unsigned int priority, unsigned int policy);
+ttsched_error_t get_process_name_by_pid(const int pid, char name[]);
+ttsched_error_t get_pid_by_name(const char *name, int *pid);
+ttsched_error_t create_pidfd(pid_t pid, int *pidfd);
+ttsched_error_t send_signal_pidfd(int pidfd, int signal);
+ttsched_error_t is_process_alive(int pidfd, int *alive);
+
+// ===== 통합된 트레이싱 함수들 =====
+// 기존 libtttrace에서 가져온 함수들
+
+// ring_buffer callback function type from libbpf.h
+typedef int (*ring_buffer_sample_fn)(void *ctx, void *data, size_t size);
+
+// 트레이싱 함수 선언
+#ifdef CONFIG_TRACE_EVENT
+void tracer_on(void);
+void tracer_off(void);
+void write_trace_marker(const char *fmt, ...);
+#else
+static inline void tracer_on(void) {}
+static inline void tracer_off(void) {}
+static inline void write_trace_marker(const char *fmt, ...) {}
+#endif
+
+#ifdef CONFIG_TRACE_BPF
+int bpf_on(ring_buffer_sample_fn sigwait_cb, ring_buffer_sample_fn schedstat_cb, void *ctx);
+void bpf_off(void);
+int bpf_add_pid(int pid);
+int bpf_del_pid(int pid);
+#else
+static inline int bpf_on(ring_buffer_sample_fn sigwait_cb, ring_buffer_sample_fn schedstat_cb, void *ctx) { return 0; }
+static inline void bpf_off(void) {}
+static inline int bpf_add_pid(int pid) { return 0; }
+static inline int bpf_del_pid(int pid) { return 0; }
+#endif
 
 // ===== TT 시스템 상수 정의 =====
 // Time Trigger 시스템에서 사용하는 모든 상수들을 TT_ 네임스페이스로 관리

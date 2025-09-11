@@ -1,0 +1,110 @@
+#include "internal.h"
+#include <stdio.h>
+#include <fcntl.h>
+#include <stdarg.h>
+#include <unistd.h>
+
+int tracer_fd = -1;
+int marker_fd = -1;
+int en_ev_sched_fd, en_ev_irq_fd;
+int en_ev_timer_fd, en_ev_signal_fd;
+int en_ev_enter_sigwait_fd, en_ev_exit_sigwait_fd;
+
+const char *tracing_path = "/sys/kernel/debug/tracing";
+
+const char *tracer_path = "/sys/kernel/debug/tracing/tracing_on";
+const char *marker_path = "/sys/kernel/debug/tracing/trace_marker";
+const char *en_ev_sched_path = "/sys/kernel/debug/tracing/events/sched/enable";
+const char *en_ev_timer_path = "/sys/kernel/debug/tracing/events/timer/enable";
+const char *en_ev_signal_path = "/sys/kernel/debug/tracing/events/signal/enable";
+const char *en_ev_enter_sigwait_path = "/sys/kernel/debug/tracing/events/syscalls/sys_enter_rt_sigtimedwait/enable";
+const char *en_ev_exit_sigwait_path = "/sys/kernel/debug/tracing/events/syscalls/sys_exit_rt_sigtimedwait/enable";
+
+static int enable_event(const char *path) {
+	int fd;
+
+	fd = open(path, O_WRONLY);
+	if (fd >= 0) {
+		printf("enable %s\n", path);
+		if (write(fd, "1", 1) != 1) {
+			// Write failed, but continue anyway
+		}
+	}
+
+	return fd;
+}
+
+static void disable_event(int fd, const char *path) {
+	if (fd >= 0) {
+		printf("disable %s\n", path);
+		if (write(fd, "0", 1) != 1) {
+			// Write failed, but continue anyway
+		}
+		close(fd);
+	}
+}
+
+static void enable_events(void) {
+	en_ev_sched_fd = enable_event(en_ev_sched_path);
+	en_ev_timer_fd = enable_event(en_ev_timer_path);
+	en_ev_signal_fd = enable_event(en_ev_signal_path);
+	en_ev_enter_sigwait_fd = enable_event(en_ev_enter_sigwait_path);
+	en_ev_exit_sigwait_fd = enable_event(en_ev_exit_sigwait_path);
+}
+
+static void open_trace_marker(void) {
+	marker_fd = open(marker_path, O_WRONLY);
+}
+
+void tracer_on(void) {
+	enable_events();
+	open_trace_marker();
+
+	tracer_fd = open(tracer_path, O_WRONLY);
+	if (tracer_fd >= 0) {
+		if (write(tracer_fd, "1", 1) != 1) {
+			// Write failed, but continue anyway
+		}
+	}
+}
+
+static void disable_events(void) {
+	disable_event(en_ev_sched_fd, en_ev_sched_path);
+	disable_event(en_ev_timer_fd, en_ev_timer_path);
+	disable_event(en_ev_signal_fd, en_ev_signal_path);
+	disable_event(en_ev_enter_sigwait_fd, en_ev_enter_sigwait_path);
+	disable_event(en_ev_exit_sigwait_fd, en_ev_exit_sigwait_path);
+}
+
+static void close_trace_marker(void) {
+	if (marker_fd >= 0) {
+		close(marker_fd);
+	}
+}
+
+void tracer_off(void) {
+	if (tracer_fd >= 0) {
+		if (write(tracer_fd, "0", 1) != 1) {
+			// Write failed, but continue anyway
+		}
+		close(tracer_fd);
+	}
+
+	close_trace_marker();
+	disable_events();
+}
+
+void write_trace_marker(const char *fmt, ...) {
+	va_list ap;
+	char buf[256];
+	int n;
+
+	if (marker_fd < 0)
+		return;
+	va_start(ap, fmt);
+	n = vsnprintf(buf, 256, fmt, ap);
+	va_end(ap);
+	if (write(marker_fd, buf, n) != n) {
+		// Write failed, but continue anyway
+	}
+}
