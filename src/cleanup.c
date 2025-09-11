@@ -79,5 +79,4 @@ static void cleanup_hyperperiod(struct context *ctx)
 static void cleanup_bpf_trace(void)
 {
     bpf_off();
-    tracer_off();
 }

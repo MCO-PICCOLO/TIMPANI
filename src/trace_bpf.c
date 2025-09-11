@@ -17,7 +17,7 @@
 #include "schedstat.skel.h"
 #endif
 
-#include "libtttrace.h"
+#include "internal.h"
 
 #define RB_TIMEOUT_MS		100
 

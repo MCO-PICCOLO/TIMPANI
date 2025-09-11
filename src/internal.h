@@ -64,22 +64,14 @@ ttsched_error_t create_pidfd(pid_t pid, int *pidfd);
 ttsched_error_t send_signal_pidfd(int pidfd, int signal);
 ttsched_error_t is_process_alive(int pidfd, int *alive);
 
-// ===== 통합된 트레이싱 함수들 =====
-// 기존 libtttrace에서 가져온 함수들
+// ===== BPF 트레이싱 함수들 =====
 
 // ring_buffer callback function type from libbpf.h
 typedef int (*ring_buffer_sample_fn)(void *ctx, void *data, size_t size);
 
-// 트레이싱 함수 선언
-#ifdef CONFIG_TRACE_EVENT
-void tracer_on(void);
-void tracer_off(void);
-void write_trace_marker(const char *fmt, ...);
-#else
-static inline void tracer_on(void) {}
-static inline void tracer_off(void) {}
-static inline void write_trace_marker(const char *fmt, ...) {}
-#endif
+// BPF 트레이싱만 사용하므로 ftrace 관련 함수들 제거됨
+
+// BPF 트레이싱 함수 선언
 
 #ifdef CONFIG_TRACE_BPF
 int bpf_on(ring_buffer_sample_fn sigwait_cb, ring_buffer_sample_fn schedstat_cb, void *ctx);
@@ -269,7 +261,6 @@ struct context {
         bool enable_sync;               // 타이머 동기화 활성화
         bool enable_plot;               // 플롯 기능 활성화
         clockid_t clockid;              // 사용할 클록 타입
-        int traceduration;              // 트레이스 지속 시간
     } config;
 
     // 런타임 상태 (실행 중 변경되는 동적 상태)
@@ -329,6 +320,5 @@ void cleanup_context(struct context *ctx);
 
 // ===== 유틸리티 함수들 =====
 tt_error_t calibrate_bpf_time_offset(void);
-tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer);
 
 #endif /* _INTERNAL_H */

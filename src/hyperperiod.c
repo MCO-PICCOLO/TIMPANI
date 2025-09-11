@@ -39,7 +39,7 @@ void hyperperiod_cycle_handler(union sigval value)
     hp_mgr->current_cycle = (hp_mgr->current_cycle + 1) %
         ((hp_mgr->hyperperiod_us > 0) ? 1 : 1); // Will be used for multi-cycle tracking
 
-    write_trace_marker("Hyperperiod cycle %lu completed at %lu us, deadline misses in this cycle: %u\n",
+    TT_LOG_DEBUG("Hyperperiod cycle %lu completed at %lu us, deadline misses in this cycle: %u",
         hp_mgr->completed_cycles, cycle_time_us, hp_mgr->cycle_deadline_misses);
 
 #ifdef HP_DEBUG

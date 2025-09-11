@@ -20,7 +20,6 @@ static void config_set_defaults(struct context *ctx)
     ctx->config.enable_sync = false;
     ctx->config.enable_plot = false;
     ctx->config.clockid = CLOCK_REALTIME;
-    ctx->config.traceduration = 3;
 }
 
 static void print_usage(const char *program_name)
@@ -30,7 +29,6 @@ static void print_usage(const char *program_name)
             "  -c <cpu_num>\tcpu affinity for timetrigger\n"
             "  -P <prio>\tRT priority (1~99) for timetrigger\n"
             "  -p <port>\tport to connect to\n"
-            "  -t <seconds>\ttrace duration in seconds\n"
             "  -n <node id>\tNode ID\n"
             "  -s\tEnable timer synchronization across multiple nodes\n"
             "  -g\tEnable saving plot data file by using BPF (<node id>.gpdata)\n"
@@ -43,7 +41,7 @@ tt_error_t parse_config(int argc, char *argv[], struct context *ctx)
     config_set_defaults(ctx);
 
     int opt;
-    while ((opt = getopt(argc, argv, "hc:P:p:n:st:g")) >= 0) {
+    while ((opt = getopt(argc, argv, "hc:P:p:n:sg")) >= 0) {
         switch (opt) {
         case 'c':
             ctx->config.cpu = atoi(optarg);
@@ -53,9 +51,6 @@ tt_error_t parse_config(int argc, char *argv[], struct context *ctx)
             break;
         case 'p':
             ctx->config.port = atoi(optarg);
-            break;
-        case 't':
-            ctx->config.traceduration = atoi(optarg);
             break;
         case 'n':
             strncpy(ctx->config.node_id, optarg, sizeof(ctx->config.node_id) - 1);
@@ -101,12 +96,6 @@ tt_error_t validate_config(const struct context *ctx)
         return TT_ERROR_CONFIG;
     }
 
-    // 트레이스 지속시간 검증
-    if (ctx->config.traceduration < 0) {
-        TT_LOG_ERROR("Invalid trace duration: %d (must be >= 0)", ctx->config.traceduration);
-        return TT_ERROR_CONFIG;
-    }
-
     // 노드 ID 검증
     if (strlen(ctx->config.node_id) == 0) {
         TT_LOG_ERROR("Node ID cannot be empty");
@@ -120,7 +109,6 @@ tt_error_t validate_config(const struct context *ctx)
     TT_LOG_INFO("  Node ID: %s", ctx->config.node_id);
     TT_LOG_INFO("  Sync enabled: %s", ctx->config.enable_sync ? "yes" : "no");
     TT_LOG_INFO("  Plot enabled: %s", ctx->config.enable_plot ? "yes" : "no");
-    TT_LOG_INFO("  Trace duration: %d seconds", ctx->config.traceduration);
 
     return TT_SUCCESS;
 }

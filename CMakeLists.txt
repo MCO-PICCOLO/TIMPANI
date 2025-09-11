@@ -6,15 +6,9 @@ project(timetrigger VERSION 2.0.0 DESCRIPTION "Timpani Time Trigger")
 # Set cmake module path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
 
-# libtttrace build options
-option(CONFIG_TRACE_EVENT "Enable event tracing" OFF)
+# BPF tracing build options
 option(CONFIG_TRACE_BPF "Enable eBPF support" ON)
 option(CONFIG_TRACE_BPF_EVENT "Enable eBPF-based event tracing" OFF)
-
-if(CONFIG_TRACE_EVENT)
-	message("CONFIG_TRACE_EVENT is ON")
-	add_compile_definitions(CONFIG_TRACE_EVENT=1)
-endif()
 
 if(CONFIG_TRACE_BPF)
 	message("CONFIG_TRACE_BPF is ON")
@@ -52,11 +46,7 @@ set(TIMETRIGGER_SOURCES
 	src/sched_internal.c
 )
 
-# Add tracing sources based on configuration
-if(CONFIG_TRACE_EVENT)
-	set(TIMETRIGGER_SOURCES ${TIMETRIGGER_SOURCES} src/trace_internal.c)
-endif()
-
+# Add BPF tracing sources based on configuration
 if(CONFIG_TRACE_BPF)
 	set(TIMETRIGGER_SOURCES ${TIMETRIGGER_SOURCES} src/trace_bpf.c)
 endif()

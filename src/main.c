@@ -88,9 +88,6 @@ static tt_error_t initialize(struct context *ctx)
 
 static tt_error_t run(struct context *ctx)
 {
-    timer_t tracetimer;
-    bool settimer = false;
-
     // 타이머 동기화
     if (sync_timer_with_server(ctx) != TT_SUCCESS) {
         TT_LOG_ERROR("Failed to synchronize timers");
@@ -109,29 +106,8 @@ static tt_error_t run(struct context *ctx)
         return TT_ERROR_TIMER;
     }
 
-    // 트레이싱 설정 및 활성화
-    tt_error_t trace_result = setup_trace_stop_timer(ctx, ctx->config.traceduration, &tracetimer);
-    if (trace_result != TT_SUCCESS) {
-        TT_LOG_WARNING("Failed to setup trace stop timer: %s", tt_error_string(trace_result));
-        settimer = false;
-    } else {
-        settimer = true;
-    }
-    tracer_on();
-
-#if defined(CONFIG_TRACE_EVENT) || defined(CONFIG_TRACE_BPF_EVENT)
-    struct timespec now;
-    clock_gettime(ctx->config.clockid, &now);
-    TT_LOG_INFO("tracer_on!!!: %ld", ts_ns(now));
-#endif
-
     // 메인 이벤트 루프
     tt_error_t result = epoll_loop(ctx);
-
-    // 트레이스 타이머 정리
-    if (settimer) {
-        timer_delete(tracetimer);
-    }
 
     TT_LOG_INFO("Shutdown requested, cleaning up resources...");
 

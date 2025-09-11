@@ -77,9 +77,8 @@ static void write_schedstat(struct context *ctx, struct schedstat_event *e, cons
 	static FILE *file;
 	uint64_t ts_wakeup, ts_start, ts_stop;
 
-	/* Check if trace stop timer is expired */
-	if (ctx->config.traceduration == 0) {
-		ctx->config.enable_plot = 0;
+	/* 플롯 기능이 비활성화된 경우 */
+	if (!ctx->config.enable_plot) {
 		if (file) {
 			fclose(file);
 			file = NULL;
@@ -175,7 +174,7 @@ void timer_expired_handler(union sigval value)
     // Calculate position within hyperperiod
     hyperperiod_position_us = get_hyperperiod_relative_time(&ctx->hp_manager);
 
-    write_trace_marker("%s: Timer expired: now: %lld, diff: %lld, hyperperiod_pos: %lu us\n",
+    TT_LOG_DEBUG("%s: Timer expired: now: %lld, diff: %lld, hyperperiod_pos: %lu us",
             task->name, ts_ns(before), ts_diff(before, tt_node->prev_timer), hyperperiod_position_us);
 
     // If a task has its own release time, do nanosleep
@@ -202,7 +201,7 @@ void timer_expired_handler(union sigval value)
         } else if (tt_node->sigwait_ts > deadline_ns) {
             printf("!!! DEADLINE MISS %s(%d): %lu > deadline %lu !!!\n",
                 task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
-            write_trace_marker("%s: Deadline miss: %lu diff\n",
+            TT_LOG_ERROR("%s: Deadline miss: %lu diff",
                 task->name, tt_node->sigwait_ts - deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
@@ -213,7 +212,7 @@ void timer_expired_handler(union sigval value)
         } else if (tt_node->sigwait_ts == tt_node->sigwait_ts_prev) {
             printf("!!! DEADLINE MISS: STUCK AT KERNEL %s(%d): %lu & deadline %lu !!!\n",
                 task->name, task->pid, tt_node->sigwait_ts, deadline_ns);
-            write_trace_marker("%s: Deadline miss: %lu diff\n",
+            TT_LOG_ERROR("%s: Deadline miss (stuck): %lu diff",
                 task->name, tt_node->sigwait_ts - deadline_ns);
             ctx->hp_manager.total_deadline_misses++;
             ctx->hp_manager.cycle_deadline_misses++;
@@ -227,7 +226,7 @@ void timer_expired_handler(union sigval value)
 #endif
 
     clock_gettime(ctx->config.clockid, &after);
-    write_trace_marker("%s: Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us \n",
+    TT_LOG_DEBUG("%s: Send signal(%d) to %d: now: %lld, lat between timer and signal: %lld us",
             task->name, SIGNO_TT, task->pid, ts_ns(after), ( ts_diff(after, before) / NSEC_PER_USEC ));
 
     // Send the signal to the target process
@@ -342,62 +341,3 @@ tt_error_t epoll_loop(struct context *ctx)
     close(efd);
     return TT_SUCCESS;
 }
-
-#if defined(CONFIG_TRACE_EVENT) || defined(CONFIG_TRACE_BPF_EVENT)
-static void signal_handler_stop_tracer(int signo, siginfo_t *info, void *context)
-{
-    struct timespec now;
-    clock_gettime(CLOCK_REALTIME, &now);
-    write_trace_marker("Stop Tracer: %lld \n", ts_ns(now));
-    tracer_off();
-    struct context *ctx = info->si_value.sival_ptr;
-    ctx->config.traceduration = 0;
-    printf("tracer_off!!!: %ld\n", ts_ns(now));
-    signal(signo, SIG_IGN);
-}
-
-tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
-{
-    struct sigevent sev = {};
-    struct itimerspec its = {};
-    struct sigaction sa = {};
-
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = &signal_handler_stop_tracer;
-    sigemptyset(&sa.sa_mask);
-    // 다른 시그널들을 마스크하여 간섭 방지
-    sigaddset(&sa.sa_mask, SIGINT);
-    sigaddset(&sa.sa_mask, SIGTERM);
-    if (sigaction(SIGNO_STOPTRACER, &sa, NULL) == -1) {
-        perror("Failed to set up signal handler");
-        return TT_ERROR_SIGNAL;
-    }
-
-    sev.sigev_notify = SIGEV_SIGNAL;
-    sev.sigev_signo = SIGNO_STOPTRACER;
-    sev.sigev_value.sival_ptr = ctx;
-
-    // context를 통해 starttimer_ts에 접근
-    its.it_value.tv_sec = ctx->runtime.starttimer_ts.tv_sec + duration;
-    its.it_value.tv_nsec = ctx->runtime.starttimer_ts.tv_nsec;
-    its.it_interval.tv_sec = duration;
-    its.it_interval.tv_nsec = 0;
-
-    if (timer_create(ctx->config.clockid, &sev, timer) == -1) {
-        perror("Failed to create timer");
-        return TT_ERROR_TIMER;
-    }
-
-    if (timer_settime(*timer, TIMER_ABSTIME, &its, NULL) == -1) {
-        perror("Failed to set timer period");
-        return TT_ERROR_TIMER;
-    }
-
-    return TT_SUCCESS;
-}
-#else
-tt_error_t setup_trace_stop_timer(struct context *ctx, int duration, timer_t *timer)
-{
-    return TT_SUCCESS;  // 추적 기능이 비활성화된 경우에도 성공으로 처리
-}
-#endif

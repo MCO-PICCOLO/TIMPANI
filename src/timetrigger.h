@@ -6,7 +6,6 @@ extern "C" {
 #endif
 
 #define SIGNO_TT		__SIGRTMIN+2
-#define SIGNO_STOPTRACER	__SIGRTMIN+3
 
 // 시간 상수 정의 (TT_ namespace)
 #define TT_NSEC_PER_SEC         1000000000ULL
