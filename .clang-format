@@ -1,7 +1,6 @@
 # Taken From Linux kernel skipping only "ForEachMacros:" in the middle:
 # https://github.com/torvalds/linux/blob/master/.clang-format
 
-Language: C
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: false
