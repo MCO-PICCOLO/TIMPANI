@@ -180,25 +180,23 @@ docker build -t centos_latest:sample_apps_v3 -f ./Dockerfile.centos ./
 
 ### Docker 실행
 ```bash
-# 고주파수 태스크 (10ms 주기)
+# 기본 워크로드 실행 (piccolo와 timpani-o/timpani-n에서 스케줄링 파라미터 관리)
 docker run -it --rm -d \
-    --cpuset-cpus 2 \
     --ulimit rtprio=99 \
     --cap-add=sys_nice \
     --privileged \
-    --name high_freq_task \
+    --name basic_task \
     ubuntu_latest:sample_apps_v3 \
-    sample_apps -t -p 10 -d 9 -P 90 container_task
+    sample_apps basic_task
 
-# 중간 주파수 태스크 (50ms 주기)
+# 특정 알고리즘 워크로드 실행 (알고리즘과 루프 파라미터만 지정)
 docker run -it --rm -d \
-    --cpuset-cpus 3 \
     --ulimit rtprio=99 \
     --cap-add=sys_nice \
     --privileged \
-    --name medium_freq_task \
+    --name matrix_task \
     ubuntu_latest:sample_apps_v3 \
-    sample_apps -t -p 50 -d 45 -P 70 -a 2 -l 5 container_task
+    sample_apps -a 4 -l 10 matrix_task
 ```
 
 ## 실시간 성능 튜닝
