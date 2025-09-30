@@ -309,6 +309,16 @@ tt_error_t epoll_loop(struct context *ctx)
         }
     }
 
+    // Add Apex.OS monitoring socket to epoll
+    struct epoll_event event;
+    event.events = EPOLLIN;
+    event.data.fd = ctx->comm.apex_fd;
+    if (epoll_ctl(efd, EPOLL_CTL_ADD, ctx->comm.apex_fd, &event) == -1) {
+        perror("epoll_ctl failed");
+        close(efd);
+        return TT_ERROR_TIMER;
+    }
+
     // Main execution loop with graceful shutdown support
     TT_LOG_INFO("Time Trigger started. Press Ctrl+C to stop gracefully.");
     while (!ctx->runtime.shutdown_requested) {
@@ -324,6 +334,18 @@ tt_error_t epoll_loop(struct context *ctx)
             close(efd);
             return TT_ERROR_TIMER;
         }
+
+	// Handle Apex.OS Monitor events
+	if (events[0].data.fd == ctx->comm.apex_fd) {
+		char name[256];
+		if (apex_monitor_recv(ctx, name, sizeof(name)) == TT_SUCCESS) {
+			TT_LOG_ERROR("!!! Apex.OS FAULT: %s !!!", name);
+			if (report_deadline_miss(ctx, name) != TT_SUCCESS) {
+				TT_LOG_WARNING("Failed to report Apex.OS fault for %s", name);
+			}
+		}
+		continue;
+	}
 
         // Handle process termination events
         struct time_trigger *tt_p;

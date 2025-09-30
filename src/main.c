@@ -83,6 +83,12 @@ static tt_error_t initialize(struct context *ctx)
         return TT_ERROR_CONFIG;
     }
 
+    // Initialize Apex.OS Monitor
+    if (apex_monitor_init(ctx) != TT_SUCCESS) {
+        TT_LOG_ERROR("Failed to initialize Apex.OS Monitor");
+        return TT_ERROR_NETWORK;
+    }
+
     return TT_SUCCESS;
 }
 

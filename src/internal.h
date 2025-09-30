@@ -318,6 +318,7 @@ struct context {
     struct {
         sd_event *event;                // systemd 이벤트 루프
         sd_bus *dbus;                   // D-Bus 연결
+        int apex_fd;                    // Apex.OS Monitor Socket FD
     } comm;
 
     // 하이퍼피리어드 관리자 (hyperperiod.c에서 관리)
@@ -363,5 +364,10 @@ void cleanup_context(struct context *ctx);
 
 // ===== 유틸리티 함수들 =====
 tt_error_t calibrate_bpf_time_offset(void);
+
+// ====== Apex.OS Monitor (apex_monitor.c) =====
+int apex_monitor_init(struct context *ctx);
+void apex_monitor_cleanup(struct context *ctx);
+int apex_monitor_recv(struct context *ctx, char *name, int size);
 
 #endif /* _INTERNAL_H */

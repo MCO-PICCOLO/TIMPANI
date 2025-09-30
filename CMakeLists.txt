@@ -45,6 +45,7 @@ set(TIMETRIGGER_SOURCES
 	src/cleanup.c
 	src/sched.c
 	src/globals.c
+	src/apex_monitor.c
 )
 
 # Add BPF tracing sources based on configuration
