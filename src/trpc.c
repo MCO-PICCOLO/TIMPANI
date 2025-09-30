@@ -20,6 +20,18 @@ static int init_trpc_connection(const char *addr, int port, sd_bus **dbus_ret, s
     return ret;
 }
 
+static void cleanup_trpc_connection(sd_bus **dbus, sd_event **event)
+{
+    if (*dbus) {
+	sd_bus_flush_close_unref(*dbus);
+	*dbus = NULL;
+    }
+    if (*event) {
+	sd_event_unref(*event);
+	*event = NULL;
+    }
+}
+
 static int get_sched_info(struct context *ctx, struct sched_info *sinfo)
 {
     int ret;
@@ -158,6 +170,8 @@ tt_error_t init_trpc(struct context *ctx)
                 TT_LOG_INFO("Successfully connected and retrieved schedule info (attempt %d)", retry_count + 1);
                 return TT_SUCCESS;
             }
+	    // Failed to get schedule info, clean up the connection resources
+	    cleanup_trpc_connection(&ctx->comm.dbus, &ctx->comm.event);
         }
 
         /* failed to get schedule info, retrying */
