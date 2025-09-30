@@ -302,6 +302,7 @@ struct context {
         char node_id[TINFO_NODEID_MAX]; // 노드 식별자
         bool enable_sync;               // 타이머 동기화 활성화
         bool enable_plot;               // 플롯 기능 활성화
+	bool enable_apex;               // Apex.OS Test Mode
         clockid_t clockid;              // 사용할 클록 타입
         tt_log_level_t log_level;       // 로그 레벨
     } config;

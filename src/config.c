@@ -19,6 +19,7 @@ static void config_set_defaults(struct context *ctx)
     ctx->config.node_id[sizeof(ctx->config.node_id) - 1] = '\0';
     ctx->config.enable_sync = false;
     ctx->config.enable_plot = false;
+    ctx->config.enable_apex = false;
     ctx->config.clockid = CLOCK_REALTIME;
     ctx->config.log_level = TT_LOG_LEVEL_INFO;  // 기본 로그 레벨
 }
@@ -34,6 +35,7 @@ static void print_usage(const char *program_name)
             "  -l <level>\tLog level (0=silent, 1=error, 2=warning, 3=info, 4=debug, 5=verbose)\n"
             "  -s\tEnable timer synchronization across multiple nodes\n"
             "  -g\tEnable saving plot data file by using BPF (<node id>.gpdata)\n"
+            "  -a\tEnable Apex.OS test mode which works without TT schedule info\n"
             "  -h\tshow this help\n",
             program_name);
 }
@@ -43,7 +45,7 @@ tt_error_t parse_config(int argc, char *argv[], struct context *ctx)
     config_set_defaults(ctx);
 
     int opt;
-    while ((opt = getopt(argc, argv, "hc:P:p:n:l:sg")) >= 0) {
+    while ((opt = getopt(argc, argv, "hc:P:p:n:l:sga")) >= 0) {
         switch (opt) {
         case 'c':
             ctx->config.cpu = atoi(optarg);
@@ -66,6 +68,9 @@ tt_error_t parse_config(int argc, char *argv[], struct context *ctx)
             break;
         case 'g':
             ctx->config.enable_plot = true;
+            break;
+        case 'a':
+	    ctx->config.enable_apex = true;
             break;
         case 'h':
         default:
@@ -124,6 +129,7 @@ tt_error_t validate_config(const struct context *ctx)
     TT_LOG_INFO("  Log level: %d", ctx->config.log_level);
     TT_LOG_INFO("  Sync enabled: %s", ctx->config.enable_sync ? "yes" : "no");
     TT_LOG_INFO("  Plot enabled: %s", ctx->config.enable_plot ? "yes" : "no");
+    TT_LOG_INFO("  Apex.OS test mode: %s", ctx->config.enable_apex ? "yes" : "no");
 
     return TT_SUCCESS;
 }

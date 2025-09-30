@@ -165,6 +165,11 @@ tt_error_t init_trpc(struct context *ctx)
     while (retry_count < TT_MAX_CONNECTION_RETRIES) {
         if (init_trpc_connection(ctx->config.addr, ctx->config.port,
                                 &ctx->comm.dbus, &ctx->comm.event) == 0) {
+            if (ctx->config.enable_apex) {
+		TT_LOG_INFO("Apex.OS test mode enabled, proceeding without schedule info");
+		return TT_SUCCESS;
+	    }
+
             if (get_sched_info(ctx, &ctx->runtime.sched_info) == 0) {
                 /* Successfully retrieved schedule info */
                 TT_LOG_INFO("Successfully connected and retrieved schedule info (attempt %d)", retry_count + 1);
