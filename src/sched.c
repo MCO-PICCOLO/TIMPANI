@@ -197,6 +197,85 @@ ttsched_error_t get_pid_by_name(const char *name, int *pid)
 	return TTSCHED_SUCCESS;
 }
 
+static int _get_pid_by_nspid(int current_pid, const char *name, int nspid)
+{
+	char path[PATH_MAX];
+	int pid;
+
+	snprintf(path, sizeof(path), "/proc/%d/status", current_pid);
+	FILE *fp = fopen(path, "r");
+	if (!fp) return -1;
+
+	char line[256];
+	while (fgets(line, sizeof(line), fp)) {
+		if (strncmp(line, "Name:", 5) == 0) {
+			// Get this line: "Name:   process_name"
+			char proc_name[PROCESS_NAME_SIZE];
+			sscanf(line + 5, "%15s", proc_name);
+			if (strncmp(proc_name, name, 15) != 0) {
+				// Name does not match
+				break;
+			}
+		} else if (strncmp(line, "NSpid:", 6) == 0) {
+			// Get this line: "NSpid:  12345  100"
+			char *saveptr;
+			char *token = strtok_r(line + 6, " \t\n", &saveptr);
+			if (token) {
+				pid = atoi(token);
+				token = strtok_r(NULL, " \t\n", &saveptr);
+				if (token) {
+					if (atoi(token) == nspid) {
+						// Found matching nspid
+						fclose(fp);
+						return pid;
+					}
+				}
+			}
+			// No matching nspid found
+			break;
+		}
+	}
+	fclose(fp);
+	return -1;
+}
+
+ttsched_error_t get_pid_by_nspid(const char *name, int nspid, int *pid)
+{
+	if (!name || !pid) {
+		TT_LOG_ERROR("Invalid name, pid pointer");
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	*pid = -1;
+
+	DIR *proc_dir = opendir("/proc");
+	if (!proc_dir) {
+		TT_LOG_ERROR("Failed to open /proc: %s", strerror(errno));
+		return TTSCHED_ERROR_SYSTEM;
+	}
+
+	struct dirent *entry;
+	while ((entry = readdir(proc_dir)) != NULL) {
+		if (entry->d_type == DT_DIR) {
+			int current_pid = atoi(entry->d_name);
+			if (current_pid > 0) {	// Skip '.' and '..' and non-numeric entries
+				*pid = _get_pid_by_nspid(current_pid, name, nspid);
+				if (*pid != -1) {
+					break;
+				}
+			}
+		}
+	}
+	closedir(proc_dir);
+
+	if (*pid == -1) {
+		TT_LOG_DEBUG("Process with name '%s' and nspid %d not found", name, nspid);
+		return TTSCHED_ERROR_SYSTEM;
+	}
+
+	return TTSCHED_SUCCESS;
+}
+
 static int open_pidfd_syscall(pid_t pid, unsigned int flags)
 {
 	return syscall(SYS_pidfd_open, pid, flags);

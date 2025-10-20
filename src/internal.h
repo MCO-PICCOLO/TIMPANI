@@ -60,6 +60,7 @@ ttsched_error_t set_affinity(pid_t pid, int cpu);
 ttsched_error_t set_schedattr(pid_t pid, unsigned int priority, unsigned int policy);
 ttsched_error_t get_process_name_by_pid(const int pid, char name[]);
 ttsched_error_t get_pid_by_name(const char *name, int *pid);
+ttsched_error_t get_pid_by_nspid(const char *name, int nspid, int *pid);
 ttsched_error_t create_pidfd(pid_t pid, int *pidfd);
 ttsched_error_t send_signal_pidfd(int pidfd, int signal);
 ttsched_error_t is_process_alive(int pidfd, int *alive);
@@ -367,8 +368,16 @@ void cleanup_context(struct context *ctx);
 tt_error_t calibrate_bpf_time_offset(void);
 
 // ====== Apex.OS Monitor (apex_monitor.c) =====
+#define MAX_APEX_NAME_LEN 256
+
+enum {
+  APEX_FAULT = 0,
+  APEX_UP = 1,
+  APEX_DOWN = 2,
+};
+
 int apex_monitor_init(struct context *ctx);
 void apex_monitor_cleanup(struct context *ctx);
-int apex_monitor_recv(struct context *ctx, char *name, int size);
+int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *type);
 
 #endif /* _INTERNAL_H */

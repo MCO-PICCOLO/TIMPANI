@@ -11,10 +11,22 @@
 #define SOCKET_PATH SOCKET_DIR SOCKET_FILE
 
 // Communication message structure for Apex.OS
-#define MAX_APEX_NAME_LEN 256
+// Refer to internal.h for enum definitions
 typedef struct {
-	char name[MAX_APEX_NAME_LEN];
-	int type;
+  int msg_type;
+  union {
+    struct {
+      char name[MAX_APEX_NAME_LEN];
+      int type;
+    } fault;
+    struct {
+      char name[MAX_APEX_NAME_LEN];
+      int pid;
+    } up;
+    struct {
+      int pid;
+    } down;
+  } data;
 } timpani_msg_t;
 
 int apex_monitor_init(struct context *ctx)
@@ -73,7 +85,7 @@ void apex_monitor_cleanup(struct context *ctx)
 	}
 }
 
-int apex_monitor_recv(struct context *ctx, char *name, int size)
+int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *type)
 {
 	int ret;
 	int server_fd = ctx->comm.apex_fd;
@@ -90,11 +102,31 @@ int apex_monitor_recv(struct context *ctx, char *name, int size)
 		// No data received
 		return TT_ERROR_IO;
 	}
-	TT_LOG_DEBUG("%s %d", msg.name, msg.type);
 
-	if (name) {
-		strncpy(name, msg.name, size - 1);
-		name[size - 1] = '\0';
+	if (msg.msg_type == APEX_FAULT) {
+		if (name) {
+			strncpy(name, msg.data.fault.name, size - 1);
+			name[size - 1] = '\0';
+		}
+	} else if (msg.msg_type == APEX_UP) {
+		if (name) {
+			strncpy(name, msg.data.up.name, size - 1);
+			name[size - 1] = '\0';
+		}
+		if (pid) {
+			*pid = msg.data.up.pid;
+		}
+	} else if (msg.msg_type == APEX_DOWN) {
+		if (pid) {
+			*pid = msg.data.down.pid;
+		}
+	} else {
+		TT_LOG_WARNING("Unknown Apex.OS message type: %d", msg.msg_type);
+		return TT_ERROR_IO;
+	}
+
+	if (type) {
+		*type = msg.msg_type;
 	}
 	// Data received
 	return TT_SUCCESS;

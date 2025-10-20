@@ -337,11 +337,22 @@ tt_error_t epoll_loop(struct context *ctx)
 
 	// Handle Apex.OS Monitor events
 	if (events[0].data.fd == ctx->comm.apex_fd) {
-		char name[256];
-		if (apex_monitor_recv(ctx, name, sizeof(name)) == TT_SUCCESS) {
-			TT_LOG_ERROR("!!! Apex.OS FAULT: %s !!!", name);
-			if (report_deadline_miss(ctx, name) != TT_SUCCESS) {
-				TT_LOG_WARNING("Failed to report Apex.OS fault for %s", name);
+		int type;
+		int nspid, pid;
+		char name[MAX_APEX_NAME_LEN];
+		if (apex_monitor_recv(ctx, name, sizeof(name), &nspid, &type) == TT_SUCCESS) {
+			if (type == APEX_FAULT) {
+				TT_LOG_INFO("!!! Apex.OS FAULT: %s !!!", name);
+				if (report_deadline_miss(ctx, name) != TT_SUCCESS) {
+					TT_LOG_WARNING("Failed to report Apex.OS fault for %s", name);
+				}
+			} else if (type == APEX_UP) {
+				if (get_pid_by_nspid(name, nspid, &pid) != TTSCHED_SUCCESS) {
+					pid = nspid;
+				}
+				TT_LOG_INFO("Apex.OS UP: name=%s, pid=%d, nspid=%d", name, pid, nspid);
+			} else if (type == APEX_DOWN) {
+				TT_LOG_INFO("Apex.OS DOWN: nspid=%d", nspid);
 			}
 		}
 		continue;
