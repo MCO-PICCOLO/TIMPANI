@@ -1,4 +1,17 @@
-find_package(gRPC REQUIRED)
+find_package(gRPC QUIET)
+  if (NOT ${gRPC_FOUND})
+    message(STATUS "gRPC not found via find_package, trying pkg-config...")
+    find_package(PkgConfig REQUIRED)
+    pkg_search_module(GRPC REQUIRED IMPORTED_TARGET grpc)
+    pkg_search_module(GRPCPP REQUIRED IMPORTED_TARGET grpc++)
+    add_library(gRPC::grpc ALIAS PkgConfig::GRPC)
+    add_library(gRPC::grpc++ ALIAS PkgConfig::GRPCPP)
+    add_executable(gRPC::grpc_cpp_plugin IMPORTED)
+    find_program(GRPC_CPP_PLUGIN NAMES grpc_cpp_plugin REQUIRED)
+    set_property(TARGET gRPC::grpc_cpp_plugin PROPERTY
+      IMPORTED_LOCATION ${GRPC_CPP_PLUGIN}
+    )
+  endif()
 find_package(Protobuf REQUIRED)
 
 include_directories(${Protobuf_INCLUDE_DIRS})
