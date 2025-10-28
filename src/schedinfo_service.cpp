@@ -32,8 +32,8 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
         TLOG_DEBUG("Task ", i, ": ", task.name());
         TLOG_DEBUG("  Priority: ", task.priority());
         TLOG_DEBUG("  Policy: ", task.policy());
-        TLOG_DEBUG("  CPU Affinity: 0x", std::hex, task.cpu_affinity(),
-                   std::dec);
+        TLOG_DEBUG("  CPU Affinity: 0x", std::setfill('0'), std::setw(16),
+                   std::hex, task.cpu_affinity(), std::dec);
         TLOG_DEBUG("  Period: ", task.period());
         TLOG_DEBUG("  Runtime: ", task.runtime());
         TLOG_DEBUG("  Deadline: ", task.deadline());
@@ -49,11 +49,75 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
     if (!sched_info_map_.empty()) {
         std::string prev_workload = sched_info_map_.begin()->first;
         TLOG_WARN("Replacing existing workload '", prev_workload, "' with new workload '", request->workload_id(), "'");
+
+        // Clean up Apex.OS allocated memory for scheduling info
+        const std::string& workload_id = sched_info_map_.begin()->first;
+        if (workload_id == "Apex.OS") {
+            auto& node_sched_map = sched_info_map_.begin()->second;
+            for (const auto& node_entry : node_sched_map) {
+                const sched_info_t& sched_info = node_entry.second;
+                if (sched_info.tasks != nullptr) {
+                    free(sched_info.tasks);
+                }
+            }
+            node_sched_map.clear();
+        }
+        // Clear existing scheduling info
         sched_info_map_.clear();
         // Clear global scheduler state when replacing workload
         global_scheduler_->clear();
         // Clear hyperperiod information for previous workload
         hyperperiod_manager_->ClearWorkload(prev_workload);
+    }
+
+    // Special handling for Apex.OS workload
+    if (request->workload_id() == "Apex.OS") {
+        TLOG_INFO("Skipping GlobalScheduler for workload: ", request->workload_id());
+
+        // Group tasks by node_id first
+        std::map<std::string, std::vector<sched_task_t>> node_tasks_map;
+
+        for (const auto& grpc_task : request->tasks()) {
+            TLOG_INFO("Timpani: Processing task: ", grpc_task.name(),
+                   " on node: ", grpc_task.node_id(),
+                   " with priority: ", grpc_task.priority(),
+                   " and period: ", grpc_task.period(), "us");
+
+            const std::string& node_id = grpc_task.node_id();
+
+            sched_task_t task;
+            memset(&task, 0, sizeof(sched_task_t));
+            std::strncpy(task.task_name, grpc_task.name().c_str(), sizeof(task.task_name) - 1);
+            task.task_name[sizeof(task.task_name) - 1] = '\0';
+            std::strncpy(task.assigned_node, node_id.c_str(), sizeof(task.assigned_node) - 1);
+            task.assigned_node[sizeof(task.assigned_node) - 1] = '\0';
+            task.cpu_affinity = grpc_task.cpu_affinity();
+            task.period_ns = static_cast<uint64_t>(grpc_task.period()) * 1000;
+            task.max_dmiss = grpc_task.max_dmiss();
+
+            node_tasks_map[node_id].push_back(task);
+        }
+
+        // Construct node_sched_map with proper memory allocation
+        NodeSchedInfoMap node_sched_map;
+
+        for (const auto& node_entry : node_tasks_map) {
+            const std::string& node_id = node_entry.first;
+            const auto& tasks = node_entry.second;
+
+            node_sched_map[node_id].num_tasks = tasks.size();
+            node_sched_map[node_id].tasks = (sched_task_t*)malloc(sizeof(sched_task_t) * tasks.size());
+
+            for (int i = 0; i < tasks.size(); i++) {
+                node_sched_map[node_id].tasks[i] = tasks[i];
+            }
+        }
+
+        // Store in our sched_info_map_ (copy the results)
+        sched_info_map_[request->workload_id()] = node_sched_map;
+
+        reply->set_status(0);  // Success
+        return Status::OK;
     }
 
     // Convert gRPC TaskInfo to internal Task structures
@@ -76,8 +140,8 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
     for (const auto& task : tasks) {
         node_task_counts[task.target_node]++;
     }
-    
-    TLOG_INFO("Workload '", request->workload_id(), "' distributes tasks across ", 
+
+    TLOG_INFO("Workload '", request->workload_id(), "' distributes tasks across ",
               node_task_counts.size(), " nodes:");
     for (const auto& entry : node_task_counts) {
         TLOG_INFO("  Node '", entry.first, "': ", entry.second, " tasks");
@@ -109,7 +173,7 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
 
     TLOG_INFO("Successfully scheduled ", global_scheduler_->get_total_scheduled_tasks(),
             " tasks across ", node_sched_map.size(), " nodes");
-    TLOG_INFO("Hyperperiod for workload '", request->workload_id(), "': ", 
+    TLOG_INFO("Hyperperiod for workload '", request->workload_id(), "': ",
               hyperperiod, " us (", hyperperiod / 1000, " ms)");
     reply->set_status(0);  // Success
     return Status::OK;
