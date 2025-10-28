@@ -26,7 +26,7 @@ struct task_info {
 };
 
 struct sched_info {
-	char container_id[64];
+	char workload_id[64];
 	int32_t container_rt_runtime;
 	int32_t container_rt_period;
 	uint64_t cpumask;

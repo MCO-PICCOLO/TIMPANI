@@ -285,6 +285,128 @@ tt_error_t start_timers(struct context *ctx)
     return TT_SUCCESS;
 }
 
+tt_error_t handle_apex_fault_event(struct context *ctx, const char *name)
+{
+	struct timespec now;
+	uint64_t delta;
+	int pid;
+	uint64_t cpu_affinity;
+	struct apex_info *apex;
+
+	LIST_FOREACH(apex, &ctx->runtime.apex_list, entry) {
+		if (strncmp(apex->task.name, name, 15) != 0) {
+			continue;
+		}
+
+		if (apex->task.pid == 0) {
+			// PID is not registered yet, try to get it
+			if (get_pid_by_name(name, &apex->task.pid) != TT_SUCCESS) {
+				TT_LOG_ERROR("No PID for Apex.OS task %s", name);
+				return TT_ERROR_INVALID_ARGS;
+			}
+		}
+
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		delta = tt_timespec_to_us(&now) - apex->dmiss_time_us;
+		if (apex->dmiss_time_us == 0 || delta > apex->task.period) {
+			apex->dmiss_count = 1;
+			apex->dmiss_time_us = tt_timespec_to_us(&now);
+		} else {
+			apex->dmiss_count++;
+		}
+
+		TT_LOG_INFO("Apex.OS Task %s deadline miss count: %d",
+			name, apex->dmiss_count);
+
+		if (apex->dmiss_count >= apex->task.allowable_deadline_misses) {
+			TT_LOG_INFO("!!! Apex.OS FAULT: %s - %d deadline misses in %llu seconds !!!",
+				name, apex->dmiss_count, apex->task.period / USEC_PER_SEC);
+			if (report_deadline_miss(ctx, name) != TT_SUCCESS) {
+				TT_LOG_WARNING("Failed to report Apex.OS fault for %s", name);
+			}
+
+			apex->dmiss_count = 0;
+			apex->dmiss_time_us = 0;
+
+			cpu_affinity = (apex->task.cpu_affinity & 0xFFFFFFFF00000000) >> 32;
+			if (set_affinity_cpumask_all_threads(apex->task.pid, cpu_affinity) != TT_SUCCESS) {
+				TT_LOG_ERROR("Failed to set CPU affinity for task %s (%d)",
+					name, apex->task.pid);
+				return TT_ERROR_PERMISSION;
+			}
+		}
+
+		return TT_SUCCESS;
+	}
+
+	return TT_ERROR_INVALID_ARGS;
+}
+
+tt_error_t handle_apex_up_event(struct context *ctx, const char *name, int nspid)
+{
+	int pid;
+	uint64_t cpu_affinity;
+	struct apex_info *apex;
+
+	if (get_pid_by_nspid(name, nspid, &pid) != TTSCHED_SUCCESS) {
+		pid = nspid;
+	}
+
+	TT_LOG_INFO("Apex.OS UP: name=%s, pid=%d, nspid=%d", name, pid, nspid);
+	LIST_FOREACH(apex, &ctx->runtime.apex_list, entry) {
+		if (strncmp(apex->task.name, name, 15) == 0) {
+			apex->task.pid = pid;
+			apex->nspid = nspid;
+			cpu_affinity = apex->task.cpu_affinity & 0xFFFFFFFF;
+			if (set_affinity_cpumask_all_threads(pid, cpu_affinity) != TT_SUCCESS) {
+				TT_LOG_ERROR("Failed to set CPU affinity for task %s (%d)",
+					name, pid);
+				return TT_ERROR_PERMISSION;
+			}
+			return TT_SUCCESS;
+		}
+	}
+	return TT_ERROR_INVALID_ARGS;
+}
+
+
+tt_error_t handle_apex_down_event(struct context *ctx, int nspid)
+{
+	struct apex_info *apex;
+
+	TT_LOG_INFO("Apex.OS DOWN: nspid=%d", nspid);
+	LIST_FOREACH(apex, &ctx->runtime.apex_list, entry) {
+		if (apex->nspid == nspid) {
+			apex->task.pid = 0;
+			apex->nspid = 0;
+			return TT_SUCCESS;
+		}
+	}
+	return TT_ERROR_INVALID_ARGS;
+}
+
+tt_error_t handle_apex_events(struct context *ctx)
+{
+	tt_error_t ret;
+	int type;
+	int nspid;
+	char name[MAX_APEX_NAME_LEN];
+
+	ret = apex_monitor_recv(ctx, name, sizeof(name), &nspid, &type);
+	if (ret != TT_SUCCESS)
+		return ret;
+
+	if (type == APEX_FAULT) {
+		handle_apex_fault_event(ctx, name);
+	} else if (type == APEX_UP) {
+		handle_apex_up_event(ctx, name, nspid);
+	} else if (type == APEX_DOWN) {
+		handle_apex_down_event(ctx, nspid);
+	}
+
+	return TT_SUCCESS;
+}
+
 tt_error_t epoll_loop(struct context *ctx)
 {
     int efd;
@@ -337,25 +459,8 @@ tt_error_t epoll_loop(struct context *ctx)
 
 	// Handle Apex.OS Monitor events
 	if (events[0].data.fd == ctx->comm.apex_fd) {
-		int type;
-		int nspid, pid;
-		char name[MAX_APEX_NAME_LEN];
-		if (apex_monitor_recv(ctx, name, sizeof(name), &nspid, &type) == TT_SUCCESS) {
-			if (type == APEX_FAULT) {
-				TT_LOG_INFO("!!! Apex.OS FAULT: %s !!!", name);
-				if (report_deadline_miss(ctx, name) != TT_SUCCESS) {
-					TT_LOG_WARNING("Failed to report Apex.OS fault for %s", name);
-				}
-			} else if (type == APEX_UP) {
-				if (get_pid_by_nspid(name, nspid, &pid) != TTSCHED_SUCCESS) {
-					pid = nspid;
-				}
-				TT_LOG_INFO("Apex.OS UP: name=%s, pid=%d, nspid=%d", name, pid, nspid);
-			} else if (type == APEX_DOWN) {
-				TT_LOG_INFO("Apex.OS DOWN: nspid=%d", nspid);
-			}
-		}
-		continue;
+            handle_apex_events(ctx);
+            continue;
 	}
 
         // Handle process termination events

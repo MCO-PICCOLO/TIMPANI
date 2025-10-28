@@ -41,6 +41,80 @@ ttsched_error_t set_affinity(pid_t pid, int cpu) {
 	return TTSCHED_SUCCESS;
 }
 
+// Sets CPU affinity for the given pid using a bitmask.
+// Each bit in cpumask represents a CPU core (bit 0 = CPU 0, bit 1 = CPU 1, ...).
+ttsched_error_t set_affinity_cpumask(pid_t pid, uint64_t cpumask) {
+	cpu_set_t cpuset;
+
+	CPU_ZERO(&cpuset);
+	for (int i = 0; i < sizeof(cpumask) * 8; ++i) {
+		if (cpumask & (1ULL << i)) {
+			CPU_SET(i, &cpuset);
+		}
+	}
+
+	// Set pid's CPU affinity mask
+	if (sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset) < 0) {
+		TT_LOG_ERROR("sched_setaffinity failed for PID %d with cpumask 0x%lx: %s",
+			pid, cpumask, strerror(errno));
+		return TTSCHED_ERROR_PERMISSION;
+	}
+
+	return TTSCHED_SUCCESS;
+}
+
+// Sets CPU affinity for all threads in a process using a bitmask.
+// Iterates through all threads in /proc/<pid>/task/ and applies the cpumask to each.
+ttsched_error_t set_affinity_cpumask_all_threads(pid_t pid, uint64_t cpumask) {
+	char task_path[256];
+	int success_count = 0;
+	int failure_count = 0;
+
+	if (pid <= 0) {
+		TT_LOG_ERROR("Invalid PID %d", pid);
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
+
+	DIR *task_dir = opendir(task_path);
+	if (!task_dir) {
+		TT_LOG_ERROR("Failed to open %s: %s", task_path, strerror(errno));
+		return TTSCHED_ERROR_SYSTEM;
+	}
+
+	struct dirent *entry;
+	while ((entry = readdir(task_dir)) != NULL) {
+		if (entry->d_type == DT_DIR) {
+			int tid = atoi(entry->d_name);
+			if (tid > 0) {  // Skip '.' and '..' and non-numeric entries
+				ttsched_error_t ret = set_affinity_cpumask(tid, cpumask);
+				if (ret == TTSCHED_SUCCESS) {
+					success_count++;
+					TT_LOG_DEBUG("Set affinity for thread %d (PID %d) to cpumask 0x%lx",
+						tid, pid, cpumask);
+				} else {
+					failure_count++;
+					TT_LOG_WARNING("Failed to set affinity for thread %d (PID %d): %s",
+						tid, pid, ttsched_error_string(ret));
+				}
+			}
+		}
+	}
+	closedir(task_dir);
+
+	if (success_count == 0 && failure_count == 0) {
+		TT_LOG_DEBUG("No threads found for PID %d", pid);
+		return TTSCHED_SUCCESS;
+	}
+
+	TT_LOG_INFO("Set CPU affinity for %d threads in PID %d to cpumask 0x%lx (%d succeeded, %d failed)",
+		success_count + failure_count, pid, cpumask, success_count, failure_count);
+
+	// Return success if at least one thread was successfully configured
+	return (success_count > 0) ? TTSCHED_SUCCESS : TTSCHED_ERROR_PERMISSION;
+}
+
 static int set_sched_attr_syscall(pid_t pid, const struct sched_attr_tt *attr,
 			unsigned int flags)
 {

@@ -57,6 +57,8 @@ struct sched_attr_tt {
 
 // 스케줄링 함수 선언
 ttsched_error_t set_affinity(pid_t pid, int cpu);
+ttsched_error_t set_affinity_cpumask(pid_t pid, uint64_t cpumask);
+ttsched_error_t set_affinity_cpumask_all_threads(pid_t pid, uint64_t cpumask);
 ttsched_error_t set_schedattr(pid_t pid, unsigned int priority, unsigned int policy);
 ttsched_error_t get_process_name_by_pid(const int pid, char name[]);
 ttsched_error_t get_pid_by_name(const char *name, int *pid);
@@ -290,6 +292,17 @@ struct hyperperiod_manager {
 
 LIST_HEAD(listhead, time_trigger);
 
+// Structure for Apex.OS Task Info
+struct apex_info {
+    struct task_info task;
+    int nspid;
+    uint64_t dmiss_time_us;
+    int dmiss_count;
+    LIST_ENTRY(apex_info) entry;
+};
+
+LIST_HEAD(apex_listhead, apex_info);
+
 // ===== TT 시스템 컨텍스트 구조체 =====
 // 전역 변수를 대체하는 중앙화된 컨텍스트 관리
 // 모든 모듈에서 필요한 상태와 설정을 하나의 구조체로 통합
@@ -314,6 +327,7 @@ struct context {
         struct sched_info sched_info;   // 스케줄링 정보
         volatile sig_atomic_t shutdown_requested; // 종료 요청 플래그
         struct timespec starttimer_ts;  // 시작 타이머 타임스탬프
+        struct apex_listhead apex_list; // Apex.OS Task List
     } runtime;
 
     // 통신 관련 (D-Bus, 이벤트 루프)
@@ -379,5 +393,6 @@ enum {
 int apex_monitor_init(struct context *ctx);
 void apex_monitor_cleanup(struct context *ctx);
 int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *type);
+tt_error_t init_apex_list(struct context *ctx);
 
 #endif /* _INTERNAL_H */

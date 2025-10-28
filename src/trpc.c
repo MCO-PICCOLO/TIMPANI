@@ -66,7 +66,6 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
 {
     uint32_t i;
     uint64_t hyperperiod_us = 0;
-    char workload_id[64] = { 0 };
 
     // Unpack sched_info
     if (deserialize_int32_t(sbuf, &sinfo->nr_tasks) < 0) {
@@ -108,7 +107,7 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
                tinfo->cpu_affinity, tinfo->allowable_deadline_misses, tinfo->node_id);
     }
 
-    if (deserialize_str(sbuf, workload_id) < 0 ||
+    if (deserialize_str(sbuf, sinfo->workload_id) < 0 ||
         deserialize_int64_t(sbuf, &hyperperiod_us) < 0) {
         TT_LOG_ERROR("Failed to deserialize workload info");
         destroy_task_info_list(sinfo->tasks);
@@ -116,11 +115,11 @@ tt_error_t deserialize_sched_info(struct context *ctx, serial_buf_t *sbuf, struc
         return TT_ERROR_NETWORK;
     }
 
-    TT_LOG_INFO("Workload: %s", workload_id);
+    TT_LOG_INFO("Workload: %s", sinfo->workload_id);
     TT_LOG_INFO("Hyperperiod: %lu us", hyperperiod_us);
 
     // context의 hp_manager에 초기화 (수정된 부분)
-    if (init_hyperperiod(ctx, workload_id, hyperperiod_us, &ctx->hp_manager) != TT_SUCCESS) {
+    if (init_hyperperiod(ctx, sinfo->workload_id, hyperperiod_us, &ctx->hp_manager) != TT_SUCCESS) {
         TT_LOG_ERROR("Failed to initialize hyperperiod manager");
         destroy_task_info_list(sinfo->tasks);
         sinfo->tasks = NULL;

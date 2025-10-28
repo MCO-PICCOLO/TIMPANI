@@ -131,3 +131,36 @@ int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *
 	// Data received
 	return TT_SUCCESS;
 }
+
+tt_error_t init_apex_list(struct context *ctx)
+{
+	int success_count = 0;
+
+	// LIST_INIT is already invoked at config_set_defaults
+
+	for (struct task_info *ti = ctx->runtime.sched_info.tasks; ti; ti = ti->next) {
+		if (strcmp(ctx->config.node_id, ti->node_id) != 0) {
+			/* The task does not belong to this node. */
+			continue;
+		}
+
+		struct apex_info *apex_task = calloc(1, sizeof(struct apex_info));
+		if (!apex_task) {
+			TT_LOG_ERROR("Failed to allocate memory for Apex.OS task");
+			continue;
+		}
+		memcpy(&apex_task->task, ti, sizeof(apex_task->task));
+
+		LIST_INSERT_HEAD(&ctx->runtime.apex_list, apex_task, entry);
+		TT_LOG_INFO("Initialized Apex.OS task: %s", ti->name);
+		success_count++;
+	}
+
+	if (success_count == 0) {
+		TT_LOG_ERROR("No tasks were successfully initialized");
+		return TT_ERROR_CONFIG;
+	}
+
+	TT_LOG_INFO("Successfully initialized %d tasks", success_count);
+	return TT_SUCCESS;
+}
