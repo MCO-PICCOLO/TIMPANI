@@ -2,7 +2,8 @@
 #include "schedinfo_service.h"
 
 SchedInfoServiceImpl::SchedInfoServiceImpl(std::shared_ptr<NodeConfigManager> node_config_manager)
-    : node_config_manager_(node_config_manager)
+    : node_config_manager_(node_config_manager),
+      sched_info_changed_(false)
 {
     TLOG_INFO("SchedInfoServiceImpl created with GlobalScheduler and HyperperiodManager integration");
 
@@ -68,6 +69,8 @@ Status SchedInfoServiceImpl::AddSchedInfo(ServerContext* context,
         global_scheduler_->clear();
         // Clear hyperperiod information for previous workload
         hyperperiod_manager_->ClearWorkload(prev_workload);
+
+        sched_info_changed_ = true;
     }
 
     // Special handling for Apex.OS workload
@@ -225,9 +228,14 @@ std::vector<Task> SchedInfoServiceImpl::ConvertTaskInfoToTasks(const SchedInfo* 
     return tasks;
 }
 
-SchedInfoMap SchedInfoServiceImpl::GetSchedInfoMap() const
+SchedInfoMap SchedInfoServiceImpl::GetSchedInfoMap(bool* changed)
 {
     std::shared_lock<std::shared_mutex> lock(sched_info_mutex_);
+    if (changed) {
+        // Reset the sched_info_changed_ flag after reading the value
+        *changed = sched_info_changed_;
+        sched_info_changed_ = false;
+    }
     return sched_info_map_;
 }
 
@@ -296,9 +304,9 @@ void SchedInfoServer::Stop()
     }
 }
 
-SchedInfoMap SchedInfoServer::GetSchedInfoMap() const
+SchedInfoMap SchedInfoServer::GetSchedInfoMap(bool* changed)
 {
-    return service_.GetSchedInfoMap();
+    return service_.GetSchedInfoMap(changed);
 }
 
 const HyperperiodInfo* SchedInfoServer::GetHyperperiodInfo(const std::string& workload_id) const

@@ -39,7 +39,7 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
     Status AddSchedInfo(ServerContext* context, const SchedInfo* request,
                         Response* reply) override;
 
-    SchedInfoMap GetSchedInfoMap() const;
+    SchedInfoMap GetSchedInfoMap(bool* changed = nullptr);
 
     /**
      * @brief Get hyperperiod information for a specific workload
@@ -64,6 +64,8 @@ class SchedInfoServiceImpl final : public SchedInfoService::Service
     SchedInfoMap sched_info_map_;
     // Use shared_mutex for sched_info_map_
     mutable std::shared_mutex sched_info_mutex_;
+    // Flag for DBusServer indicating whether sched_info_map_ has changed
+    bool sched_info_changed_;
     // Node configuration manager
     std::shared_ptr<NodeConfigManager> node_config_manager_;
     // Global scheduler
@@ -85,8 +87,8 @@ class SchedInfoServer
     ~SchedInfoServer();
     bool Start(int port);
     void Stop();
-    SchedInfoMap GetSchedInfoMap() const;
-    
+    SchedInfoMap GetSchedInfoMap(bool* changed = nullptr);
+
     /**
      * @brief Get hyperperiod information for a specific workload
      * @param workload_id The workload identifier
@@ -99,7 +101,7 @@ class SchedInfoServer
      * @return Map of workload_id to HyperperiodInfo
      */
     const std::map<std::string, HyperperiodInfo>& GetAllHyperperiods() const;
-    
+
     void DumpSchedInfo();
 
  private:

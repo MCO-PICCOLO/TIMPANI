@@ -42,6 +42,7 @@ class DBusServer
 
     // Serialize scheduling information for libtrpc callbacks
     bool SerializeSchedInfo(const SchedInfoMap& map);
+    void FreeSchedInfoBuf();
 
     // Static callbacks for libtrpc
     static void RegisterCallback(const char* name);

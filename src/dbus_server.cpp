@@ -76,13 +76,7 @@ void DBusServer::Stop()
         }
     }
 
-    {
-        std::lock_guard<std::mutex> lock(sched_info_buf_mutex_);
-        if (sched_info_buf_) {
-            free_serial_buf(sched_info_buf_);
-            sched_info_buf_ = nullptr;
-        }
-    }
+    FreeSchedInfoBuf();
 
     SetSchedInfoServer(nullptr);
 
@@ -183,6 +177,15 @@ bool DBusServer::SerializeSchedInfo(const SchedInfoMap& map)
     return true;
 }
 
+void DBusServer::FreeSchedInfoBuf()
+{
+    std::lock_guard<std::mutex> lock(sched_info_buf_mutex_);
+    if (sched_info_buf_) {
+        free_serial_buf(sched_info_buf_);
+        sched_info_buf_ = nullptr;
+    }
+}
+
 void DBusServer::RegisterCallback(const char* name)
 {
     // FIXME: Currently not being used by Timpani-N
@@ -196,7 +199,14 @@ void DBusServer::SchedInfoCallback(const char* name, void** buf,
 
     DBusServer& instance = GetInstance();
     if (instance.sched_info_server_) {
-        auto sched_info_map = instance.sched_info_server_->GetSchedInfoMap();
+        bool changed = false;
+        auto sched_info_map = instance.sched_info_server_->GetSchedInfoMap(&changed);
+
+        if (changed) {
+            TLOG_DEBUG("Schedule info changed, freeing previous buffer");
+            instance.FreeSchedInfoBuf();
+        }
+
         if (!sched_info_map.empty() &&
             instance.SerializeSchedInfo(sched_info_map)) {
             std::lock_guard<std::mutex> lock(instance.sched_info_buf_mutex_);
@@ -233,11 +243,11 @@ void DBusServer::DMissCallback(const char* name, const char* task)
             for (const auto& workload_entry : map) {
                 const std::string& wl_id = workload_entry.first;
                 const auto& node_sched_info = workload_entry.second;
-                
+
                 for (const auto& node_entry : node_sched_info) {
                     const std::string& node_id = node_entry.first;
                     const sched_info_t& sched_info = node_entry.second;
-                    
+
                     // Check if this node matches the callback node and has the task
                     if (node_id == name) {
                         for (int i = 0; i < sched_info.num_tasks; i++) {
@@ -252,7 +262,7 @@ void DBusServer::DMissCallback(const char* name, const char* task)
                 }
                 if (found) break;
             }
-            
+
             if (!found) {
                 TLOG_WARN("Could not find task '", task, "' on node '", name, "' in any workload");
                 // Currently only references the first workload as fallback
