@@ -120,6 +120,8 @@ int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *
 		if (pid) {
 			*pid = msg.data.down.pid;
 		}
+	} else if (msg.msg_type == APEX_RESET) {
+		// RESET message received, it is for DEMO purpose only
 	} else {
 		TT_LOG_WARNING("Unknown Apex.OS message type: %d", msg.msg_type);
 		return TT_ERROR_IO;

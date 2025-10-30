@@ -328,6 +328,7 @@ tt_error_t handle_apex_fault_event(struct context *ctx, const char *name)
 			apex->dmiss_count = 0;
 			apex->dmiss_time_us = 0;
 
+			// Change CPU affinity to recover from the fault
 			cpu_affinity = (apex->task.cpu_affinity & 0xFFFFFFFF00000000) >> 32;
 			if (set_affinity_cpumask_all_threads(apex->task.pid, cpu_affinity) != TT_SUCCESS) {
 				TT_LOG_ERROR("Failed to set CPU affinity for task %s (%d)",
@@ -357,6 +358,8 @@ tt_error_t handle_apex_up_event(struct context *ctx, const char *name, int nspid
 		if (strncmp(apex->task.name, name, 15) == 0) {
 			apex->task.pid = pid;
 			apex->nspid = nspid;
+
+			// Set CPU affinity for the whole process
 			cpu_affinity = apex->task.cpu_affinity & 0xFFFFFFFF;
 			if (set_affinity_cpumask_all_threads(pid, cpu_affinity) != TT_SUCCESS) {
 				TT_LOG_ERROR("Failed to set CPU affinity for task %s (%d)",
@@ -369,7 +372,6 @@ tt_error_t handle_apex_up_event(struct context *ctx, const char *name, int nspid
 	return TT_ERROR_INVALID_ARGS;
 }
 
-
 tt_error_t handle_apex_down_event(struct context *ctx, int nspid)
 {
 	struct apex_info *apex;
@@ -380,6 +382,27 @@ tt_error_t handle_apex_down_event(struct context *ctx, int nspid)
 			apex->task.pid = 0;
 			apex->nspid = 0;
 			return TT_SUCCESS;
+		}
+	}
+	return TT_ERROR_INVALID_ARGS;
+}
+
+tt_error_t handle_apex_reset_event(struct context *ctx)
+{
+	uint64_t cpu_affinity;
+	struct apex_info *apex;
+
+	TT_LOG_INFO("Apex.OS RESET");
+	LIST_FOREACH(apex, &ctx->runtime.apex_list, entry) {
+		int pid = apex->task.pid;
+		if (pid) {
+			// Reset CPU affinity to the normal value
+			cpu_affinity = apex->task.cpu_affinity & 0xFFFFFFFF;
+			if (set_affinity_cpumask_all_threads(pid, cpu_affinity) != TT_SUCCESS) {
+				TT_LOG_ERROR("Failed to set CPU affinity for task %s (%d)",
+					apex->task.name, pid);
+				return TT_ERROR_PERMISSION;
+			}
 		}
 	}
 	return TT_ERROR_INVALID_ARGS;
@@ -402,6 +425,8 @@ tt_error_t handle_apex_events(struct context *ctx)
 		handle_apex_up_event(ctx, name, nspid);
 	} else if (type == APEX_DOWN) {
 		handle_apex_down_event(ctx, nspid);
+	} else if (type == APEX_RESET) {
+		handle_apex_reset_event(ctx);
 	}
 
 	return TT_SUCCESS;

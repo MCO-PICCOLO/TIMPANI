@@ -388,6 +388,7 @@ enum {
   APEX_FAULT = 0,
   APEX_UP = 1,
   APEX_DOWN = 2,
+  APEX_RESET = 3,
 };
 
 int apex_monitor_init(struct context *ctx);
