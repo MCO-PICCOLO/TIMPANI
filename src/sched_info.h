@@ -13,7 +13,7 @@ typedef struct {
     uint64_t runtime_ns;         // Runtime in nanoseconds
     uint64_t deadline_ns;        // Deadline in nanoseconds
     int release_time;            // Release Time in us
-    int cpu_affinity;            // CPU affinity (CPU ID)
+    uint64_t cpu_affinity;       // CPU affinity (CPU ID)
     int sched_policy;            // Scheduling policy (SCHED_FIFO, SCHED_RR, etc.)
     int sched_priority;          // Scheduling priority
     int max_dmiss;               // Allowable max deadline misses
