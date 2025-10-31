@@ -7,6 +7,7 @@ ExternalProject_Add(libbpf
 	SOURCE_DIR ${LIBBPF_SOURCE_DIR}
 	CONFIGURE_COMMAND ""
 	BUILD_COMMAND make
+		BUILD_STATIC_ONLY=1
 		OBJDIR=${LIBBPF_BINARY_DIR}/obj
 		DESTDIR=${LIBBPF_BINARY_DIR}
 		INCLUDEDIR=
@@ -19,11 +20,12 @@ ExternalProject_Add(libbpf
 )
 
 # import libbpf as bpf target
-add_library(bpf SHARED IMPORTED)
+add_library(bpf STATIC IMPORTED)
 set_target_properties(bpf PROPERTIES
-	IMPORTED_LOCATION ${LIBBPF_BINARY_DIR}/libbpf.so
+	IMPORTED_LOCATION ${LIBBPF_BINARY_DIR}/libbpf.a
 	INTERFACE_INCLUDE_DIRECTORIES ${LIBBPF_BINARY_DIR}
 )
+target_link_libraries(bpf INTERFACE elf z)
 # let 'make clean' clean up the whole libbpf output
 set_property(DIRECTORY
 	APPEND
