@@ -41,6 +41,80 @@ ttsched_error_t set_affinity(pid_t pid, int cpu) {
 	return TTSCHED_SUCCESS;
 }
 
+// Sets CPU affinity for the given pid using a bitmask.
+// Each bit in cpumask represents a CPU core (bit 0 = CPU 0, bit 1 = CPU 1, ...).
+ttsched_error_t set_affinity_cpumask(pid_t pid, uint64_t cpumask) {
+	cpu_set_t cpuset;
+
+	CPU_ZERO(&cpuset);
+	for (int i = 0; i < sizeof(cpumask) * 8; ++i) {
+		if (cpumask & (1ULL << i)) {
+			CPU_SET(i, &cpuset);
+		}
+	}
+
+	// Set pid's CPU affinity mask
+	if (sched_setaffinity(pid, sizeof(cpu_set_t), &cpuset) < 0) {
+		TT_LOG_ERROR("sched_setaffinity failed for PID %d with cpumask 0x%lx: %s",
+			pid, cpumask, strerror(errno));
+		return TTSCHED_ERROR_PERMISSION;
+	}
+
+	return TTSCHED_SUCCESS;
+}
+
+// Sets CPU affinity for all threads in a process using a bitmask.
+// Iterates through all threads in /proc/<pid>/task/ and applies the cpumask to each.
+ttsched_error_t set_affinity_cpumask_all_threads(pid_t pid, uint64_t cpumask) {
+	char task_path[256];
+	int success_count = 0;
+	int failure_count = 0;
+
+	if (pid <= 0) {
+		TT_LOG_ERROR("Invalid PID %d", pid);
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	snprintf(task_path, sizeof(task_path), "/proc/%d/task", pid);
+
+	DIR *task_dir = opendir(task_path);
+	if (!task_dir) {
+		TT_LOG_ERROR("Failed to open %s: %s", task_path, strerror(errno));
+		return TTSCHED_ERROR_SYSTEM;
+	}
+
+	struct dirent *entry;
+	while ((entry = readdir(task_dir)) != NULL) {
+		if (entry->d_type == DT_DIR) {
+			int tid = atoi(entry->d_name);
+			if (tid > 0) {  // Skip '.' and '..' and non-numeric entries
+				ttsched_error_t ret = set_affinity_cpumask(tid, cpumask);
+				if (ret == TTSCHED_SUCCESS) {
+					success_count++;
+					TT_LOG_DEBUG("Set affinity for thread %d (PID %d) to cpumask 0x%lx",
+						tid, pid, cpumask);
+				} else {
+					failure_count++;
+					TT_LOG_WARNING("Failed to set affinity for thread %d (PID %d): %s",
+						tid, pid, ttsched_error_string(ret));
+				}
+			}
+		}
+	}
+	closedir(task_dir);
+
+	if (success_count == 0 && failure_count == 0) {
+		TT_LOG_DEBUG("No threads found for PID %d", pid);
+		return TTSCHED_SUCCESS;
+	}
+
+	TT_LOG_INFO("Set CPU affinity for %d threads in PID %d to cpumask 0x%lx (%d succeeded, %d failed)",
+		success_count + failure_count, pid, cpumask, success_count, failure_count);
+
+	// Return success if at least one thread was successfully configured
+	return (success_count > 0) ? TTSCHED_SUCCESS : TTSCHED_ERROR_PERMISSION;
+}
+
 static int set_sched_attr_syscall(pid_t pid, const struct sched_attr_tt *attr,
 			unsigned int flags)
 {
@@ -191,6 +265,85 @@ ttsched_error_t get_pid_by_name(const char *name, int *pid)
 
 	if (*pid == -1) {
 		TT_LOG_WARNING("Process with name '%s' not found", name);
+		return TTSCHED_ERROR_SYSTEM;
+	}
+
+	return TTSCHED_SUCCESS;
+}
+
+static int _get_pid_by_nspid(int current_pid, const char *name, int nspid)
+{
+	char path[PATH_MAX];
+	int pid;
+
+	snprintf(path, sizeof(path), "/proc/%d/status", current_pid);
+	FILE *fp = fopen(path, "r");
+	if (!fp) return -1;
+
+	char line[256];
+	while (fgets(line, sizeof(line), fp)) {
+		if (strncmp(line, "Name:", 5) == 0) {
+			// Get this line: "Name:   process_name"
+			char proc_name[PROCESS_NAME_SIZE];
+			sscanf(line + 5, "%15s", proc_name);
+			if (strncmp(proc_name, name, 15) != 0) {
+				// Name does not match
+				break;
+			}
+		} else if (strncmp(line, "NSpid:", 6) == 0) {
+			// Get this line: "NSpid:  12345  100"
+			char *saveptr;
+			char *token = strtok_r(line + 6, " \t\n", &saveptr);
+			if (token) {
+				pid = atoi(token);
+				token = strtok_r(NULL, " \t\n", &saveptr);
+				if (token) {
+					if (atoi(token) == nspid) {
+						// Found matching nspid
+						fclose(fp);
+						return pid;
+					}
+				}
+			}
+			// No matching nspid found
+			break;
+		}
+	}
+	fclose(fp);
+	return -1;
+}
+
+ttsched_error_t get_pid_by_nspid(const char *name, int nspid, int *pid)
+{
+	if (!name || !pid) {
+		TT_LOG_ERROR("Invalid name, pid pointer");
+		return TTSCHED_ERROR_INVALID_ARGS;
+	}
+
+	*pid = -1;
+
+	DIR *proc_dir = opendir("/proc");
+	if (!proc_dir) {
+		TT_LOG_ERROR("Failed to open /proc: %s", strerror(errno));
+		return TTSCHED_ERROR_SYSTEM;
+	}
+
+	struct dirent *entry;
+	while ((entry = readdir(proc_dir)) != NULL) {
+		if (entry->d_type == DT_DIR) {
+			int current_pid = atoi(entry->d_name);
+			if (current_pid > 0) {	// Skip '.' and '..' and non-numeric entries
+				*pid = _get_pid_by_nspid(current_pid, name, nspid);
+				if (*pid != -1) {
+					break;
+				}
+			}
+		}
+	}
+	closedir(proc_dir);
+
+	if (*pid == -1) {
+		TT_LOG_DEBUG("Process with name '%s' and nspid %d not found", name, nspid);
 		return TTSCHED_ERROR_SYSTEM;
 	}
 

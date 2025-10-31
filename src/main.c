@@ -74,13 +74,28 @@ static tt_error_t initialize(struct context *ctx)
         return TT_ERROR_NETWORK;
     }
 
-    // BPF 활성화
-    bpf_on(handle_sigwait_bpf_event, handle_schedstat_bpf_event, (void *)ctx);
+    if (!ctx->config.enable_apex) {
+        if (strcmp(ctx->hp_manager.workload_id, "Apex.OS") == 0) {
+            if (init_apex_list(ctx) != TT_SUCCESS) {
+                TT_LOG_ERROR("Failed to initialize Apex.OS task list");
+                return TT_ERROR_CONFIG;
+            }
+        } else {
+            // BPF 활성화
+            bpf_on(handle_sigwait_bpf_event, handle_schedstat_bpf_event, (void *)ctx);
 
-    // 태스크 리스트 초기화
-    if (init_task_list(ctx) != TT_SUCCESS) {
-        TT_LOG_ERROR("Failed to initialize time trigger list");
-        return TT_ERROR_CONFIG;
+            // 태스크 리스트 초기화
+            if (init_task_list(ctx) != TT_SUCCESS) {
+                TT_LOG_ERROR("Failed to initialize time trigger list");
+                return TT_ERROR_CONFIG;
+            }
+        }
+    }
+
+    // Initialize Apex.OS Monitor
+    if (apex_monitor_init(ctx) != TT_SUCCESS) {
+        TT_LOG_ERROR("Failed to initialize Apex.OS Monitor");
+        return TT_ERROR_NETWORK;
     }
 
     return TT_SUCCESS;

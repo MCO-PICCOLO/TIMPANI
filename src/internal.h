@@ -57,9 +57,12 @@ struct sched_attr_tt {
 
 // 스케줄링 함수 선언
 ttsched_error_t set_affinity(pid_t pid, int cpu);
+ttsched_error_t set_affinity_cpumask(pid_t pid, uint64_t cpumask);
+ttsched_error_t set_affinity_cpumask_all_threads(pid_t pid, uint64_t cpumask);
 ttsched_error_t set_schedattr(pid_t pid, unsigned int priority, unsigned int policy);
 ttsched_error_t get_process_name_by_pid(const int pid, char name[]);
 ttsched_error_t get_pid_by_name(const char *name, int *pid);
+ttsched_error_t get_pid_by_nspid(const char *name, int nspid, int *pid);
 ttsched_error_t create_pidfd(pid_t pid, int *pidfd);
 ttsched_error_t send_signal_pidfd(int pidfd, int signal);
 ttsched_error_t is_process_alive(int pidfd, int *alive);
@@ -289,6 +292,17 @@ struct hyperperiod_manager {
 
 LIST_HEAD(listhead, time_trigger);
 
+// Structure for Apex.OS Task Info
+struct apex_info {
+    struct task_info task;
+    int nspid;
+    uint64_t dmiss_time_us;
+    int dmiss_count;
+    LIST_ENTRY(apex_info) entry;
+};
+
+LIST_HEAD(apex_listhead, apex_info);
+
 // ===== TT 시스템 컨텍스트 구조체 =====
 // 전역 변수를 대체하는 중앙화된 컨텍스트 관리
 // 모든 모듈에서 필요한 상태와 설정을 하나의 구조체로 통합
@@ -302,6 +316,7 @@ struct context {
         char node_id[TINFO_NODEID_MAX]; // 노드 식별자
         bool enable_sync;               // 타이머 동기화 활성화
         bool enable_plot;               // 플롯 기능 활성화
+	bool enable_apex;               // Apex.OS Test Mode
         clockid_t clockid;              // 사용할 클록 타입
         tt_log_level_t log_level;       // 로그 레벨
     } config;
@@ -312,12 +327,14 @@ struct context {
         struct sched_info sched_info;   // 스케줄링 정보
         volatile sig_atomic_t shutdown_requested; // 종료 요청 플래그
         struct timespec starttimer_ts;  // 시작 타이머 타임스탬프
+        struct apex_listhead apex_list; // Apex.OS Task List
     } runtime;
 
     // 통신 관련 (D-Bus, 이벤트 루프)
     struct {
         sd_event *event;                // systemd 이벤트 루프
         sd_bus *dbus;                   // D-Bus 연결
+        int apex_fd;                    // Apex.OS Monitor Socket FD
     } comm;
 
     // 하이퍼피리어드 관리자 (hyperperiod.c에서 관리)
@@ -363,5 +380,20 @@ void cleanup_context(struct context *ctx);
 
 // ===== 유틸리티 함수들 =====
 tt_error_t calibrate_bpf_time_offset(void);
+
+// ====== Apex.OS Monitor (apex_monitor.c) =====
+#define MAX_APEX_NAME_LEN 256
+
+enum {
+  APEX_FAULT = 0,
+  APEX_UP = 1,
+  APEX_DOWN = 2,
+  APEX_RESET = 3,
+};
+
+int apex_monitor_init(struct context *ctx);
+void apex_monitor_cleanup(struct context *ctx);
+int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *type);
+tt_error_t init_apex_list(struct context *ctx);
 
 #endif /* _INTERNAL_H */
