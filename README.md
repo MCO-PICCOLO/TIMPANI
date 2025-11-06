@@ -43,7 +43,20 @@ make
 ### Cross-compilation for ARM64
 
 ```
+cd build
 cmake -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchain-aarch64-gcc.cmake ..
+make
+```
+
+### Packaging
+
+```
+cd build
+cpack -G DEB
+or
+cpack -G RPM
+or
+cpack -G TGZ
 ```
 
 ## Coding style

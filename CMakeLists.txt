@@ -19,7 +19,7 @@ add_subdirectory(proto)
 add_subdirectory(src)
 
 # Add libtrpc submodule
-add_subdirectory(${CMAKE_SOURCE_DIR}/external/libtrpc)
+add_subdirectory(${CMAKE_SOURCE_DIR}/external/libtrpc EXCLUDE_FROM_ALL)
 
 # Option to build tests
 option(BUILD_TESTS "Build unit tests" OFF)
@@ -29,3 +29,9 @@ if(BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# Packaging configuration
+set(CPACK_PACKAGE_NAME "timpani-o")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_CONTACT "Timpani Developers")
+include(CPack)
