@@ -94,8 +94,13 @@ target_compile_options(timetrigger
 install(TARGETS timetrigger DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # exprocs test program
-add_executable(exprocs test/exprocs.c)
-install(TARGETS exprocs DESTINATION ${CMAKE_INSTALL_BINDIR})
+add_executable(exprocs EXCLUDE_FROM_ALL test/exprocs.c)
 
 # libtrpc library
-add_subdirectory(libtrpc)
+add_subdirectory(libtrpc EXCLUDE_FROM_ALL)
+
+# Packaging configuration
+set(CPACK_PACKAGE_NAME "timpani-n")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_CONTACT "Timpani Developers")
+include(CPack)
