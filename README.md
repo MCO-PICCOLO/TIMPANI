@@ -68,6 +68,25 @@ make
   - Loads a bpf program to keep track of sched_switch and sched_waking events of time-triggered tasks
   - Calculates on-cpu time and scheduling latency
 
+### Cross-compilation for ARM64
+
+```
+cd build-arm64
+cmake -DCMAKE_TOOLCHAIN_FILE=../toolchain-aarch64-gcc.cmake ..
+make
+```
+
+### Packaging
+
+```
+cd build
+cpack -G DEB
+or
+cpack -G RPM
+or
+cpack -G TGZ
+```
+
 ## How to use
 
 execute sample wakee1 process in terminal 1
@@ -88,7 +107,7 @@ cd build
 sudo ./exprocs wakee3 20000
 ```
 
-execute dummy server, and modify schedinfo.yaml before running if task info is different 
+execute dummy server, and modify schedinfo.yaml before running if task info is different
 ```
 cd build
 ./dummy_server

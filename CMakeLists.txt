@@ -62,19 +62,17 @@ if(CONFIG_TRACE_BPF)
 	target_link_libraries(timetrigger bpf pthread)
 endif()
 
-# 성능 최적화 플래그 추가
+# Compile options for perfomance optimization
 target_compile_options(timetrigger PRIVATE
-	-O3                    # 최고 수준 최적화
-	-march=native          # 네이티브 아키텍처 최적화
-	-mtune=native          # 네이티브 튜닝
-	-flto                  # Link Time Optimization
-	-funroll-loops         # 루프 언롤링
-	-finline-functions     # 함수 인라이닝
-	-ffast-math            # 빠른 수학 연산
-	-fomit-frame-pointer   # 프레임 포인터 생략
+	-O3
+	-flto
+	-funroll-loops
+	-finline-functions
+	-ffast-math
+	-fomit-frame-pointer
 )
 
-# 링크 시 최적화
+# Link options for optimization
 set_target_properties(timetrigger PROPERTIES
 	LINK_FLAGS "-flto -O3"
 )
