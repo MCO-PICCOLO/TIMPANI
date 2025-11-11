@@ -63,3 +63,9 @@ target_include_directories(
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
   PUBLIC ${LIBSYSTEMD_INCLUDE_DIRS})
 target_compile_options(trpc_client PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER})
+
+# Packaging configuration
+set(CPACK_PACKAGE_NAME "libtrpc")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_CONTACT "Timpani Developers")
+include(CPack)
