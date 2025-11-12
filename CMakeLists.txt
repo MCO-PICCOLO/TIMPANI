@@ -6,13 +6,38 @@ project(
   VERSION 2.0.0
   DESCRIPTION "Timpani RPC library")
 
-# if pkg-config is not available, run 'sudo apt install pkg-config'
-find_package(PkgConfig REQUIRED)
+# check if pkg-config is available
+find_package(PkgConfig)
 
-# pkg-config --cflags --libs libsystemd
-# if libsystemd-dev is not available, run 'sudo apt install libsystemd-dev'
-pkg_check_modules(LIBSYSTEMD REQUIRED libsystemd)
+if(PKG_CONFIG_FOUND)
+  pkg_check_modules(LIBSYSTEMD libsystemd)
+endif()
 
+if (NOT LIBSYSTEMD_FOUND)
+  # check if libsystemd configuration is defined manually
+  if(DEFINED LIBSYSTEMD_INCLUDE_DIRS AND
+     DEFINED LIBSYSTEMD_LIBRARIES AND
+     DEFINED LIBSYSTEMD_VERSION)
+    set(LIBSYSTEMD_FOUND TRUE)
+    message(STATUS "Manually set libsystemd package configuration:")
+    message(STATUS "  Include: ${LIBSYSTEMD_INCLUDE_DIRS}")
+    message(STATUS "  Libraries: ${LIBSYSTEMD_LIBRARIES}")
+    message(STATUS "  Version: ${LIBSYSTEMD_VERSION}")
+  else()
+    message(FATAL_ERROR "Run cmake as follows for libsystemd:\n"
+            "cmake -DLIBSYSTEMD_INCLUDE_DIRS=/path/to/include "
+            "-DLIBSYSTEMD_LIBRARIES=/path/to/lib/libsystemd.so "
+            "-DLIBSYSTEMD_VERSION=250")
+  endif()
+else()
+  # get the libsystemd version
+  execute_process(
+    COMMAND ${PKG_CONFIG_EXECUTABLE} --modversion libsystemd
+    OUTPUT_VARIABLE LIBSYSTEMD_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif()
+
+# set DEBUG=1 if CMAKE_BUILD_TYPE=Debug
 add_compile_definitions("DEBUG=$<CONFIG:Debug>")
 
 # libtrpc library
@@ -24,6 +49,10 @@ set_target_properties(trpc PROPERTIES VERSION ${PROJECT_VERSION}
 
 set_target_properties(trpc PROPERTIES PUBLIC_HEADER src/libtrpc.h)
 
+# set libtrpc compile definitions
+target_compile_definitions(trpc
+                           PRIVATE "LIBSYSTEMD_VERSION=${LIBSYSTEMD_VERSION}")
+
 # libsystemd required for library linking
 target_link_libraries(trpc PUBLIC ${LIBSYSTEMD_LIBRARIES})
 
@@ -33,18 +62,6 @@ install(
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
   PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-
-# get the libsystemd version
-if(LIBSYSTEMD_FOUND)
-  execute_process(
-    COMMAND ${PKG_CONFIG_EXECUTABLE} --modversion libsystemd
-    OUTPUT_VARIABLE LIBSYSTEMD_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE)
-  message(STATUS "Found libsystemd version: ${LIBSYSTEMD_VERSION}")
-
-  target_compile_definitions(trpc
-                             PRIVATE "LIBSYSTEMD_VERSION=${LIBSYSTEMD_VERSION}")
-endif()
 
 # trpc_server test program
 add_executable(trpc_server test/trpc_server.c)

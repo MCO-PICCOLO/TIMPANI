@@ -44,6 +44,12 @@ cmake -DCMAKE_TOOLCHAIN_FILE=../armhf-toolchain.cmake ..
 make
 ```
 
+### Manually specifying libsystemd path and version
+If pkg-config does not find libsystemd, you can manually specify libsystemd path and version:
+```
+cmake -DLIBSYSTEMD_INCLUDE_DIRS=/path/to/include -DLIBSYSTEMD_LIBRARIES=/path/to/lib/libsystemd.so -DLIBSYSTEMD_VERSION=version ..
+```
+
 ## Running test programs
 
 - The sample server program waits for connection from clients and provides several methods.
