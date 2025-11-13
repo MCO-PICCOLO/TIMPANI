@@ -6,7 +6,7 @@
 
 #include "internal.h"
 
-#define SOCKET_DIR "/var/run/timpani/"
+#define SOCKET_DIR "/tmp/timpani/"
 #define SOCKET_FILE "timpani.sock"
 #define SOCKET_PATH SOCKET_DIR SOCKET_FILE
 
