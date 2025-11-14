@@ -6,6 +6,7 @@
 
 #include "internal.h"
 
+// Apex.OS UDS path definitions
 #define SOCKET_DIR "/tmp/timpani/"
 #define SOCKET_FILE "timpani.sock"
 #define SOCKET_PATH SOCKET_DIR SOCKET_FILE
@@ -29,6 +30,7 @@ typedef struct {
   } data;
 } timpani_msg_t;
 
+// Initialize Apex.OS Monitor UDS
 int apex_monitor_init(struct context *ctx)
 {
 	int server_fd;
@@ -74,6 +76,7 @@ int apex_monitor_init(struct context *ctx)
 	return TT_SUCCESS;
 }
 
+// Cleanup Apex.OS Monitor UDS
 void apex_monitor_cleanup(struct context *ctx)
 {
 	int server_fd = ctx->comm.apex_fd;
@@ -85,6 +88,7 @@ void apex_monitor_cleanup(struct context *ctx)
 	}
 }
 
+// Receive a Apex.OS fault event
 int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *type)
 {
 	int ret;
@@ -134,6 +138,7 @@ int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *
 	return TT_SUCCESS;
 }
 
+// Initialize Apex.OS task list from sched_info
 tt_error_t init_apex_list(struct context *ctx)
 {
 	int success_count = 0;
