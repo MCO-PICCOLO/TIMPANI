@@ -3,6 +3,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdatomic.h>
 
 #include "internal.h"
 
@@ -249,7 +250,7 @@ tt_error_t coredata_client_send(struct apex_info *app)
 	msg.dmiss_status.pid = app->nspid;
 	msg.dmiss_status.period_us = app->task.period;
 	msg.dmiss_status.dmiss_max = app->task.allowable_deadline_misses;
-	msg.dmiss_status.dmiss_count = app->dmiss_count;
+	msg.dmiss_status.dmiss_count = atomic_load(&app->dmiss_count);
 
 	// Send message to coredata provider
 	ret = sendto(coredata_fd, &msg, sizeof(msg), 0,
@@ -265,6 +266,19 @@ tt_error_t coredata_client_send(struct apex_info *app)
 static void coredata_timer_handler(union sigval sv)
 {
 	struct apex_info *app = (struct apex_info *)sv.sival_ptr;
+	struct timespec now;
+	uint64_t delta;
+	uint64_t dmiss_time_us = atomic_load(&app->dmiss_time_us);
+
+	if (dmiss_time_us != 0) {
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		delta = tt_timespec_to_us(&now) - dmiss_time_us;
+		if (delta > app->task.period) {
+			// Task period expired, so reset counters
+            		atomic_store(&app->dmiss_count, 0);
+            		atomic_store(&app->dmiss_time_us, 0);
+		}
+	}
 
 	coredata_client_send(app);
 }

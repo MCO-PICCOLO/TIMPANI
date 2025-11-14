@@ -1,3 +1,5 @@
+#include <stdatomic.h> // atomic operations
+
 #include "internal.h"
 
 // BPF 콜백 함수들
@@ -307,12 +309,14 @@ tt_error_t handle_apex_fault_event(struct context *ctx, const char *name)
 		}
 
 		clock_gettime(CLOCK_MONOTONIC, &now);
-		delta = tt_timespec_to_us(&now) - apex->dmiss_time_us;
-		if (apex->dmiss_time_us == 0 || delta > apex->task.period) {
-			apex->dmiss_count = 1;
-			apex->dmiss_time_us = tt_timespec_to_us(&now);
+		uint64_t now_us = tt_timespec_to_us(&now);
+        	uint64_t dmiss_time_us = atomic_load(&apex->dmiss_time_us);
+		delta = now_us - dmiss_time_us;
+		if (dmiss_time_us == 0 || delta > apex->task.period) {
+			atomic_store(&apex->dmiss_count, 1);
+			atomic_store(&apex->dmiss_time_us, now_us);
 		} else {
-			apex->dmiss_count++;
+			atomic_fetch_add(&apex->dmiss_count, 1);
 		}
 
 		TT_LOG_INFO("Apex.OS Task %s deadline miss count: %d",
@@ -321,15 +325,17 @@ tt_error_t handle_apex_fault_event(struct context *ctx, const char *name)
 		// Send fault info to coredata provider
 		coredata_client_send(apex);
 
-		if (apex->dmiss_count >= apex->task.allowable_deadline_misses) {
+		int dmiss_count = atomic_load(&apex->dmiss_count);
+		if (dmiss_count >= apex->task.allowable_deadline_misses) {
 			TT_LOG_INFO("!!! Apex.OS FAULT: %s - %d deadline misses in %llu seconds !!!",
-				name, apex->dmiss_count, apex->task.period / USEC_PER_SEC);
+				name, dmiss_count, apex->task.period / USEC_PER_SEC);
 			if (report_deadline_miss(ctx, name) != TT_SUCCESS) {
 				TT_LOG_WARNING("Failed to report Apex.OS fault for %s", name);
 			}
 
-			apex->dmiss_count = 0;
-			apex->dmiss_time_us = 0;
+			// Reset deadline miss counters
+			atomic_store(&apex->dmiss_count, 0);
+			atomic_store(&apex->dmiss_time_us, 0);
 
 			// Change CPU affinity to recover from the fault
 			cpu_affinity = (apex->task.cpu_affinity & 0xFFFFFFFF00000000) >> 32;
@@ -412,6 +418,10 @@ tt_error_t handle_apex_reset_event(struct context *ctx)
 					apex->task.name, pid);
 				return TT_ERROR_PERMISSION;
 			}
+
+			// Reset deadline miss counters
+			atomic_store(&apex->dmiss_count, 0);
+			atomic_store(&apex->dmiss_time_us, 0);
 
 			// Send fault info to coredata provider
 			coredata_client_send(apex);
