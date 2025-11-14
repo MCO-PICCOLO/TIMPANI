@@ -361,6 +361,8 @@ tt_error_t handle_apex_up_event(struct context *ctx, const char *name, int nspid
 		if (strncmp(apex->task.name, name, 15) == 0) {
 			apex->task.pid = pid;
 			apex->nspid = nspid;
+			strncpy(apex->name, name, MAX_APEX_NAME_LEN - 1);
+			apex->name[MAX_APEX_NAME_LEN - 1] = '\0';
 
 			// Set CPU affinity for the whole process
 			cpu_affinity = apex->task.cpu_affinity & 0xFFFFFFFF;

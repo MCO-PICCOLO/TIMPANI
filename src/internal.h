@@ -293,8 +293,11 @@ struct hyperperiod_manager {
 LIST_HEAD(listhead, time_trigger);
 
 // Structure for Apex.OS Task Info
+#define MAX_APEX_NAME_LEN 256
+
 struct apex_info {
     struct task_info task;
+    char name[MAX_APEX_NAME_LEN];
     int nspid;
     uint64_t dmiss_time_us;
     int dmiss_count;
@@ -382,8 +385,6 @@ void cleanup_context(struct context *ctx);
 tt_error_t calibrate_bpf_time_offset(void);
 
 // ====== Apex.OS Monitor (apex_monitor.c) =====
-#define MAX_APEX_NAME_LEN 256
-
 enum {
   APEX_FAULT = 0,
   APEX_UP = 1,
