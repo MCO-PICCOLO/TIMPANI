@@ -171,3 +171,86 @@ tt_error_t init_apex_list(struct context *ctx)
 	TT_LOG_INFO("Successfully initialized %d tasks", success_count);
 	return TT_SUCCESS;
 }
+
+// CoreData Provider communication definitions and structures
+// Copied from http://mod.lge.com/hub/sdvcore/coredata_provider/-/blob/master/src/app_data_receiver.hpp
+#define COREDATA_SOCKET_PATH "/tmp/appdata/appdata.sock"
+
+#define MAX_APP_NAME_LEN   256
+#define MAX_CORE_MASK_LEN  64
+#define MAX_JSON_DATA_LEN  10240
+
+enum {
+  APP_STATUS = 0,
+  JSON_DATA = 1,
+};
+
+struct app_data_msg_t {
+    int msg_type;
+    union {
+        struct {
+            char name[MAX_APP_NAME_LEN];
+            int pid;
+            double fps;
+            double latency;
+            char core_masking[MAX_CORE_MASK_LEN];
+            char safety_core_masking[MAX_CORE_MASK_LEN];
+        } app_status;
+
+        struct {
+            char json_string[MAX_JSON_DATA_LEN];
+        } json_data;
+    };
+} __attribute__((packed));
+
+// Initialize coredata provider client UDS
+static int coredata_client_init(void)
+{
+	int fd;
+
+	// Create Unix domain socket
+	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+	if (fd == -1) {
+		return -1;
+	}
+
+	return fd;
+}
+
+tt_error_t coredata_client_send(struct apex_info *app)
+{
+	static int coredata_fd = -1;
+	static struct sockaddr_un server_addr;
+	int ret;
+	struct app_data_msg_t msg;
+
+	if (coredata_fd == -1) {
+		// init client socket for coredata provider
+		ret = coredata_client_init();
+		if (ret == -1)
+			return TT_ERROR_IO;
+		coredata_fd = ret;
+
+		// Set up server address
+		memset(&server_addr, 0, sizeof(server_addr));
+		server_addr.sun_family = AF_UNIX;
+		strncpy(server_addr.sun_path, COREDATA_SOCKET_PATH, sizeof(server_addr.sun_path) - 1);
+	}
+
+	// Prepare message
+	msg.msg_type = JSON_DATA;
+	snprintf(msg.json_data.json_string, MAX_JSON_DATA_LEN - 1,
+		"name:\"%s\", period:%u, max_dmiss:%d, curr_dmiss:%d",
+		app->task.name, app->task.period,
+		app->task.allowable_deadline_misses, app->dmiss_count);
+	msg.json_data.json_string[MAX_JSON_DATA_LEN - 1] = '\0';
+
+	// Send message to coredata provider
+	ret = sendto(coredata_fd, &msg, sizeof(msg), 0,
+		(struct sockaddr*)&server_addr, sizeof(server_addr));
+        if (ret == -1) {
+		return TT_ERROR_IO;
+        }
+
+	return TT_SUCCESS;
+}

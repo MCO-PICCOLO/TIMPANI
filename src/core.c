@@ -318,6 +318,9 @@ tt_error_t handle_apex_fault_event(struct context *ctx, const char *name)
 		TT_LOG_INFO("Apex.OS Task %s deadline miss count: %d",
 			name, apex->dmiss_count);
 
+		// Send fault info to coredata provider
+		coredata_client_send(apex);
+
 		if (apex->dmiss_count >= apex->task.allowable_deadline_misses) {
 			TT_LOG_INFO("!!! Apex.OS FAULT: %s - %d deadline misses in %llu seconds !!!",
 				name, apex->dmiss_count, apex->task.period / USEC_PER_SEC);
@@ -403,6 +406,9 @@ tt_error_t handle_apex_reset_event(struct context *ctx)
 					apex->task.name, pid);
 				return TT_ERROR_PERMISSION;
 			}
+
+			// Send fault info to coredata provider
+			coredata_client_send(apex);
 		}
 	}
 	return TT_ERROR_INVALID_ARGS;
