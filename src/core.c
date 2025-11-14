@@ -371,6 +371,9 @@ tt_error_t handle_apex_up_event(struct context *ctx, const char *name, int nspid
 					name, pid);
 				return TT_ERROR_PERMISSION;
 			}
+
+			// Create coredata timer
+			coredata_create_timer(apex);
 			return TT_SUCCESS;
 		}
 	}
@@ -384,6 +387,7 @@ tt_error_t handle_apex_down_event(struct context *ctx, int nspid)
 	TT_LOG_INFO("Apex.OS DOWN: nspid=%d", nspid);
 	LIST_FOREACH(apex, &ctx->runtime.apex_list, entry) {
 		if (apex->nspid == nspid) {
+			coredata_delete_timer(apex); // Delete coredata timer
 			apex->task.pid = 0;
 			apex->nspid = 0;
 			return TT_SUCCESS;

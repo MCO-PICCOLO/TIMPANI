@@ -301,6 +301,7 @@ struct apex_info {
     int nspid;
     uint64_t dmiss_time_us;
     int dmiss_count;
+    timer_t coredata_timer;
     LIST_ENTRY(apex_info) entry;
 };
 
@@ -397,5 +398,7 @@ void apex_monitor_cleanup(struct context *ctx);
 int apex_monitor_recv(struct context *ctx, char *name, int size, int *pid, int *type);
 tt_error_t init_apex_list(struct context *ctx);
 tt_error_t coredata_client_send(struct apex_info *app);
+tt_error_t coredata_create_timer(struct apex_info *app);
+void coredata_delete_timer(struct apex_info *app);
 
 #endif /* _INTERNAL_H */

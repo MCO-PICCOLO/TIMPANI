@@ -182,7 +182,7 @@ tt_error_t init_apex_list(struct context *ctx)
 
 enum {
   APP_STATUS = 0,
-  JSON_DATA = 1,
+  DMISS_STATUS = 1,
 };
 
 struct app_data_msg_t {
@@ -198,10 +198,14 @@ struct app_data_msg_t {
         } app_status;
 
         struct {
-            char json_string[MAX_JSON_DATA_LEN];
-        } json_data;
+            char name[MAX_APP_NAME_LEN];
+            int pid;
+            int dmiss_max;
+            int dmiss_count;
+            int64_t period_us;
+        } dmiss_status;
     };
-} __attribute__((packed));
+};
 
 // Initialize coredata provider client UDS
 static int coredata_client_init(void)
@@ -217,6 +221,7 @@ static int coredata_client_init(void)
 	return fd;
 }
 
+// Send deadline miss info to coredata provider
 tt_error_t coredata_client_send(struct apex_info *app)
 {
 	static int coredata_fd = -1;
@@ -238,12 +243,13 @@ tt_error_t coredata_client_send(struct apex_info *app)
 	}
 
 	// Prepare message
-	msg.msg_type = JSON_DATA;
-	snprintf(msg.json_data.json_string, MAX_JSON_DATA_LEN - 1,
-		"name:\"%s\", period:%u, max_dmiss:%d, curr_dmiss:%d",
-		app->task.name, app->task.period,
-		app->task.allowable_deadline_misses, app->dmiss_count);
-	msg.json_data.json_string[MAX_JSON_DATA_LEN - 1] = '\0';
+	msg.msg_type = DMISS_STATUS;
+	strncpy(msg.dmiss_status.name, app->name, MAX_APP_NAME_LEN - 1);
+	msg.dmiss_status.name[MAX_APP_NAME_LEN - 1] = '\0';
+	msg.dmiss_status.pid = app->nspid;
+	msg.dmiss_status.period_us = app->task.period;
+	msg.dmiss_status.dmiss_max = app->task.allowable_deadline_misses;
+	msg.dmiss_status.dmiss_count = app->dmiss_count;
 
 	// Send message to coredata provider
 	ret = sendto(coredata_fd, &msg, sizeof(msg), 0,
@@ -253,4 +259,54 @@ tt_error_t coredata_client_send(struct apex_info *app)
         }
 
 	return TT_SUCCESS;
+}
+
+// Timer handler for periodic coredata reporting
+static void coredata_timer_handler(union sigval sv)
+{
+	struct apex_info *app = (struct apex_info *)sv.sival_ptr;
+
+	coredata_client_send(app);
+}
+
+// Create a timer for periodic coredata reporting
+tt_error_t coredata_create_timer(struct apex_info *app)
+{
+	struct sigevent sev;
+	struct itimerspec its;
+
+	if (!app) return TT_ERROR_INVALID_ARGS;
+
+	// Configure the sigevent structure
+	memset(&sev, 0, sizeof(struct sigevent));
+	sev.sigev_notify = SIGEV_THREAD;
+	sev.sigev_notify_function = coredata_timer_handler;
+	sev.sigev_value.sival_ptr = app;
+
+	// Create the timer
+	if (timer_create(CLOCK_REALTIME, &sev, &app->coredata_timer) == -1) {
+		TT_LOG_ERROR("Failed to create coredata timer");
+		return TT_ERROR_TIMER;
+	}
+
+	// Configure the timer to expire immediately at first, then every 0.5 second
+	its.it_value.tv_sec = 0;      // Initial expiration: 1 ms
+	its.it_value.tv_nsec = 1000;
+	its.it_interval.tv_sec = 0;   // Interval: 500 ms
+	its.it_interval.tv_nsec = 500000000;
+
+	// Start the timer
+	if (timer_settime(app->coredata_timer, 0, &its, NULL) == -1) {
+		TT_LOG_ERROR("Failed to start coredata timer");
+		timer_delete(app->coredata_timer);
+		return TT_ERROR_TIMER;
+	}
+	return TT_SUCCESS;
+}
+
+// Delete the coredata reporting timer
+void coredata_delete_timer(struct apex_info *app)
+{
+	if (app && app->coredata_timer)
+		timer_delete(app->coredata_timer);
 }
