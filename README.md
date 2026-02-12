@@ -1,0 +1,41 @@
+# TIMPANI
+
+This repository contains three components:
+
+## Components
+
+### [Sample Applications](sample-apps/README.md)
+Real-time sample applications for real-time system analysis. Provides periodic execution, deadline monitoring, and runtime statistics collection capabilities.
+
+- [Korean Documentation](sample-apps/README_kr.md)
+
+### [TIMPANI-N (Time Trigger)](timpani-n/README.md)
+Time Trigger component.
+
+- [CentOS Setup](timpani-n/README.CentOS.md)
+- [Ubuntu 20 Setup](timpani-n/README.Ubuntu20.md)
+
+### [TIMPANI-O](timpani-o/README.md)
+TIMPANI-O component with gRPC & protobuf support.
+
+## 📖 Documentation Structure
+
+```
+TIMPANI/
+├── README.md                    # This file - main project overview
+├── sample-apps/
+│   ├── README.md               # Sample applications documentation
+│   └── README_kr.md           # Korean documentation
+├── timpani-n/
+│   ├── README.md               # Time trigger component
+│   ├── README.CentOS.md       # CentOS setup guide
+│   └── README.Ubuntu20.md     # Ubuntu setup guide
+└── timpani-o/
+    └── README.md               # Orchestrator component
+```
+
+
+
+---
+
+**Navigation:** [Sample Apps](sample-apps/) | [TIMPANI-N](timpani-n/) | [TIMPANI-O](timpani-o/)

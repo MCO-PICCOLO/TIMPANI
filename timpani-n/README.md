@@ -43,8 +43,8 @@ sudo apt install -y libyaml-dev
 ## Build
 
 ```
-git clone http://mod.lge.com/hub/timpani/time-trigger.git
-cd time-trigger
+git clone https://github.com/MCO-PICCOLO/TIMPANI.git
+cd timpani-n
 git submodule init
 git submodule update
 mkdir build

@@ -32,7 +32,7 @@ Refer to [This README.md](http://mod.lge.com/hub/timpani/time-trigger/-/blob/mai
 ## How to build
 
 ```
-git clone --recurse-submodules http://mod.lge.com/hub/timpani/timpani-o.git
+git clone --recurse-submodules https://github.com/MCO-PICCOLO/TIMPANI.git
 cd timpani-o
 mkdir build
 cd build
