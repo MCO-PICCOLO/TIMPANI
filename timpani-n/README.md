@@ -14,7 +14,7 @@ For CentOS, refer to [README.CentOS.md](README.CentOS.md).
 
 libelf-dev and zlib1g-dev required for libbpf submodule
 
-> NOTE: libbpf has been integrated as a git submodule since [CO-RE feature merge](http://mod.lge.com/hub/timpani/time-trigger/-/commit/c4cddcdbfb337c60579014c9f88f56055edf2b38)
+> NOTE: libbpf has been integrated as a git submodule since CO-RE feature merge.
 ```
 sudo apt install -y libelf-dev zlib1g-dev
 ```
