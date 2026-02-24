@@ -1,4 +1,4 @@
-# Time Trigger
+# Timpani-N
 
 
 
@@ -14,7 +14,7 @@ For CentOS, refer to [README.CentOS.md](README.CentOS.md).
 
 libelf-dev and zlib1g-dev required for libbpf submodule
 
-> NOTE: libbpf has been integrated as a git submodule since CO-RE feature merge.
+> NOTE: libbpf has been integrated as a git submodule since
 ```
 sudo apt install -y libelf-dev zlib1g-dev
 ```
@@ -44,9 +44,10 @@ sudo apt install -y libyaml-dev
 
 ```
 git clone https://github.com/MCO-PICCOLO/TIMPANI.git
+cd TIMPANI
+git submodule add https://github.com/libbpf/libbpf.git libbpf
+git submodule update --init --recursive
 cd timpani-n
-git submodule init
-git submodule update
 mkdir build
 cd build
 cmake ..
