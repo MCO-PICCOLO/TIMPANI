@@ -1,7 +1,7 @@
 # Project Overview
 
 This `Timpani-O` project is a C++ application that interacts with a time-triggered scheduling system for real-time tasks.
-It includes a gRPC server that allows `Piccolo`, a workload orchestrator, to add new scheduling tables, and a gRPC client to notify `Piccolo` of deadline miss faults.
+It includes a gRPC server that allows `Pullpiri`, a workload orchestrator, to add new scheduling tables, and a gRPC client to notify `Pullpiri` of deadline miss faults.
 Additionally, it provides a D-Bus peer-to-peer server that offers the following time-triggered scheduling features for `Timpani-N` (also known as the Timpani node manager):
 
   - Send scheduling tables to `Timpani-N`
@@ -18,7 +18,7 @@ Additionally, it provides a D-Bus peer-to-peer server that offers the following 
 ## Libraries and Dependencies
 
 - CMake: For building the project.
-- gRPC: For communication between `Timpani-O` and `Piccolo`.
+- gRPC: For communication between `Timpani-O` and `Pullpiri`.
 - Protocol Buffers: For serializing structured data.
 
 ## Coding Style

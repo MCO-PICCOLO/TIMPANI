@@ -16,10 +16,10 @@ using schedinfo::v1::FaultType;
 using schedinfo::v1::Response;
 
 /**
- * @brief Singleton gRPC client for communicating with Piccolo's FaultService
+ * @brief Singleton gRPC client for communicating with Pullpiri's FaultService
  *
  * This class implements the Singleton design pattern and manages a persistent
- * gRPC connection to Piccolo for fault notifications.
+ * gRPC connection to Pullpiri for fault notifications.
  *
  * Usage example:
  *   FaultServiceClient& client = FaultServiceClient::GetInstance();
@@ -32,7 +32,7 @@ class FaultServiceClient
   public:
     static FaultServiceClient& GetInstance();
 
-    // Initialize the gRPC connection to Piccolo
+    // Initialize the gRPC connection to Pullpiri
     bool Initialize(const std::string& server_address);
 
     // Check if the client is properly initialized
