@@ -12,14 +12,22 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # Add the binary dir to include dirs for gRPC/protobuf generated files
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-# Add proto directory
+# 1. Integration of libtrpc (Sibling folder in root)
+# This points to the libtrpc folder located at the same level as timpani-o
+if(EXISTS "${CMAKE_SOURCE_DIR}/../libtrpc")
+    add_subdirectory("${CMAKE_SOURCE_DIR}/../libtrpc" "${CMAKE_BINARY_DIR}/libtrpc" EXCLUDE_FROM_ALL)
+    
+    # Ensure headers for libtrpc are available to timpani-o
+    include_directories("${CMAKE_SOURCE_DIR}/../libtrpc/src")
+else()
+    message(WARNING "libtrpc sibling directory not found at ${CMAKE_SOURCE_DIR}/../libtrpc")
+endif()
+
+# 2. Add local project components
 add_subdirectory(proto)
 
 # Add source directory
 add_subdirectory(src)
-
-# Add libtrpc submodule
-add_subdirectory(${CMAKE_SOURCE_DIR}/external/libtrpc EXCLUDE_FROM_ALL)
 
 # Option to build tests
 option(BUILD_TESTS "Build unit tests" OFF)

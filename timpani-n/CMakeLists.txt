@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 # project name and version
-project(timetrigger VERSION 2.0.0 DESCRIPTION "Timpani Time Trigger")
+project(timpani-n VERSION 2.0.0 DESCRIPTION "Timpani-n")
 
 # Set cmake module path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}")
@@ -11,94 +11,94 @@ option(CONFIG_TRACE_BPF "Enable eBPF support" ON)
 option(CONFIG_TRACE_BPF_EVENT "Enable eBPF-based event tracing" OFF)
 
 if(CONFIG_TRACE_BPF)
-	message("CONFIG_TRACE_BPF is ON")
+    message("CONFIG_TRACE_BPF is ON")
 
-	# for ExternalProject_Add
-	include(ExternalProject)
+    include(ExternalProject)
 
-	# load libbpf.cmake
-	include(libbpf)
+    # Path to the shared libbpf in the TIMPANI root
+    set(SHARED_LIBBPF_PATH "${CMAKE_SOURCE_DIR}/../libbpf")
 
-	# Load bpf.cmake
-	include(bpf)
+    # Manually define libbpf project to point to the shared root
+    ExternalProject_Add(libbpf
+        SOURCE_DIR "${SHARED_LIBBPF_PATH}"
+        CONFIGURE_COMMAND ""
+        BUILD_COMMAND make -C <SOURCE_DIR>/src BUILD_STATIC_ONLY=1 DESTDIR=<BINARY_DIR> OBJDIR=<BINARY_DIR>/obj install
+        INSTALL_COMMAND ""
+        BINARY_DIR "${CMAKE_BINARY_DIR}/libbpf"
+    )
 
-	add_compile_definitions(CONFIG_TRACE_BPF=1)
-	ADD_BPF(src/trace_bpf.c src/sigwait.bpf.c sigwait.bpf.o sigwait.skel.h)
+    # Load bpf.cmake - we must help clang find headers in the shared root
+    include(bpf)
 
-if(CONFIG_TRACE_BPF_EVENT)
-	message("CONFIG_TRACE_BPF_EVENT is ON")
-	add_compile_definitions(CONFIG_TRACE_BPF_EVENT=1)
-	ADD_BPF(src/trace_bpf.c src/schedstat.bpf.c schedstat.bpf.o schedstat.skel.h)
+    # We pass the shared path to Clang so #include <bpf/bpf_helpers.h> works
+    # We use -I.../src because the 'bpf' folder is inside 'src'
+    set(BPF_EXTRA_CFLAGS "-I${SHARED_LIBBPF_PATH}/src")
+
+    add_compile_definitions(CONFIG_TRACE_BPF=1)
+
+    # IMPORTANT: We need to make sure the ADD_BPF macro uses our new path
+    # If sigwait.bpf.c fails to find headers, we might need to edit bpf.cmake
+    include_directories(${CMAKE_BINARY_DIR}/libbpf/usr/include)
+    ADD_BPF(src/trace_bpf.c src/sigwait.bpf.c sigwait.bpf.o sigwait.skel.h)
+
+    if(CONFIG_TRACE_BPF_EVENT)
+        message("CONFIG_TRACE_BPF_EVENT is ON")
+        add_compile_definitions(CONFIG_TRACE_BPF_EVENT=1)
+        # Add this right before ADD_BPF in CMakeLists.txt
+        ADD_BPF(src/trace_bpf.c src/schedstat.bpf.c schedstat.bpf.o schedstat.skel.h)
+    endif()
 endif()
 
-endif()
-
-# timetrigger sources - integrated scheduling and tracing
-set(TIMETRIGGER_SOURCES
-	src/main.c
-	src/core.c
-	src/hyperperiod.c
+# timpani-n sources
+set(TIMPANI_N_SOURCES
+    src/main.c 
+	src/core.c 
+	src/hyperperiod.c 
 	src/task.c
-	src/config.c
-	src/trpc.c
-	src/signal.c
+    src/config.c 
+	src/trpc.c 
+	src/signal.c 
 	src/cleanup.c
-	src/sched.c
-	src/globals.c
+    src/sched.c 
+	src/globals.c 
 	src/apex_monitor.c
 )
 
-# Add BPF tracing sources based on configuration
 if(CONFIG_TRACE_BPF)
-	set(TIMETRIGGER_SOURCES ${TIMETRIGGER_SOURCES} src/trace_bpf.c)
+    set(TIMPANI_N_SOURCES ${TIMPANI_N_SOURCES} src/trace_bpf.c)
 endif()
 
-add_executable(timetrigger ${TIMETRIGGER_SOURCES})
+add_executable(timpani-n ${TIMPANI_N_SOURCES})
 
-# BPF dependencies for timetrigger
+# BPF dependencies
 if(CONFIG_TRACE_BPF)
-	add_dependencies(timetrigger libbpf)
-	target_include_directories(timetrigger PRIVATE ${CMAKE_BINARY_DIR})
-	target_link_libraries(timetrigger bpf pthread)
+    add_dependencies(timpani-n libbpf)
+    target_include_directories(timpani-n PRIVATE
+        ${CMAKE_BINARY_DIR}
+        ${CMAKE_BINARY_DIR}/libbpf/usr/include
+    )
+    target_link_libraries(timpani-n
+        ${CMAKE_BINARY_DIR}/libbpf/obj/libbpf.a
+        pthread elf z
+    )
 endif()
 
-# Compile options for perfomance optimization
-target_compile_options(timetrigger PRIVATE
-	-O3
-	-flto
-	-funroll-loops
-	-finline-functions
-	-ffast-math
-	-fomit-frame-pointer
+# Optimization
+target_compile_options(timpani-n PRIVATE -O3 -flto -funroll-loops -ffast-math -fomit-frame-pointer)
+set_target_properties(timpani-n PROPERTIES LINK_FLAGS "-flto -O3")
+
+# Handle libtrpc (Sibling folder)
+if(EXISTS "${CMAKE_SOURCE_DIR}/../libtrpc")
+    add_subdirectory("${CMAKE_SOURCE_DIR}/../libtrpc" "${CMAKE_BINARY_DIR}/libtrpc" EXCLUDE_FROM_ALL)
+endif()
+
+target_link_libraries(timpani-n trpc systemd rt)
+target_include_directories(timpani-n
+    PUBLIC ${CMAKE_SOURCE_DIR}/src
+    PUBLIC ${CMAKE_SOURCE_DIR}/../libtrpc/src
 )
 
-# Link options for optimization
-set_target_properties(timetrigger PROPERTIES
-	LINK_FLAGS "-flto -O3"
-)
-
-target_link_libraries(timetrigger
-		trpc
-		systemd
-		rt
-)
-target_include_directories(timetrigger
-			PUBLIC ${CMAKE_SOURCE_DIR}/src
-			PUBLIC ${CMAKE_SOURCE_DIR}/libtrpc/src
-)
-target_compile_options(timetrigger
-		PUBLIC ${LIBSYSTEMD_CFLAGS_OTHER}
-)
-install(TARGETS timetrigger DESTINATION ${CMAKE_INSTALL_BINDIR})
-
-# exprocs test program
+install(TARGETS timpani-n DESTINATION bin)
 add_executable(exprocs EXCLUDE_FROM_ALL test/exprocs.c)
 
-# libtrpc library
-add_subdirectory(libtrpc EXCLUDE_FROM_ALL)
-
-# Packaging configuration
-set(CPACK_PACKAGE_NAME "timpani-n")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_CONTACT "Timpani Developers")
 include(CPack)
