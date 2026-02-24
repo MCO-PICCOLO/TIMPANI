@@ -44,9 +44,9 @@ sudo apt install -y libyaml-dev
 
 ```
 git clone https://github.com/MCO-PICCOLO/TIMPANI.git
+git submodule add https://github.com/libbpf/libbpf.git libbpf
+git submodule update --init --recursive
 cd timpani-n
-git submodule init
-git submodule update
 mkdir build
 cd build
 cmake ..
