@@ -2,7 +2,7 @@
 
 ## Getting started
 
-Refer to [This README.md](http://mod.lge.com/hub/timpani/time-trigger/-/blob/main/README.md) for the full description of the project.
+Refer to [This README.md](https://github.com/MCO-PICCOLO/TIMPANI/blob/main/timpani-n/README.md) for the full description of the project.
 
 ## Prerequisites
 
