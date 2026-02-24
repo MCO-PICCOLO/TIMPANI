@@ -22,7 +22,7 @@ bool FaultServiceClient::Initialize(const std::string& server_address)
     }
 
     if (!CreateChannel(server_address)) {
-        TLOG_ERROR("Failed to create gRPC channel to Piccolo");
+        TLOG_ERROR("Failed to create gRPC channel to Pullpiri");
         return false;
     }
 
@@ -54,7 +54,7 @@ bool FaultServiceClient::NotifyFault(const std::string &workload_id,
     Response reply;
     ClientContext context;
 
-    TLOG_INFO("Notifying Piccolo - Workload: ", workload_id,
+    TLOG_INFO("Notifying Pullpiri - Workload: ", workload_id,
               ", Node: ", node_id, ", Task: ", task_name,
               ", Fault Type: ", FaultTypeToStr(fault_type));
 
@@ -67,7 +67,7 @@ bool FaultServiceClient::NotifyFault(const std::string &workload_id,
     }
 
     if (reply.status() != 0) {
-        TLOG_ERROR("NotifyFault: Piccolo returned error: ", reply.status());
+        TLOG_ERROR("NotifyFault: Pullpiri returned error: ", reply.status());
         return false;
     }
 

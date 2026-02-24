@@ -2,7 +2,7 @@
 
 ## Getting started
 
-Refer to [This README.md](https://github.com/MCO-PICCOLO/TIMPANI/blob/main/timpani-n/README.md) for the full description of the project.
+Refer to [TIMPANI-N's README.md](https://github.com/MCO-PICCOLO/TIMPANI/blob/main/timpani-n/README.md) for the full description of the project.
 
 ## Prerequisites
 

@@ -28,7 +28,7 @@ using SchedInfoMap = std::map<std::string, NodeSchedInfoMap>;
 /**
 * @brief Implementation of the SchedInfoService gRPC service
 *
-* This service handles scheduling information deliveries from Piccolo to Timpani-O.
+* This service handles scheduling information deliveries from Pullpiri to Timpani-O.
 * It processes SchedInfo messages and returns a Response indicating success or failure.
 */
 class SchedInfoServiceImpl final : public SchedInfoService::Service

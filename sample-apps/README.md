@@ -180,7 +180,7 @@ docker build -t centos_latest:sample_apps_v3 -f ./Dockerfile.centos ./
 
 ### Docker Run
 ```bash
-# Run basic workload (scheduling parameters managed by piccolo and timpani-o/timpani-n)
+# Run basic workload (scheduling parameters managed by pullpiri and timpani-o/timpani-n)
 docker run -it --rm -d \
     --ulimit rtprio=99 \
     --cap-add=sys_nice \
