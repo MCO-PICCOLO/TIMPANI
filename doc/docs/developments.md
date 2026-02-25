@@ -23,18 +23,18 @@ This document describes the development workflow, testing, static analysis, and 
 2. Create a new branch for your feature or bugfix.
 3. Make your changes, following the [coding rules](../contribution/coding-rule.md).
 4. Run static analysis and tests locally.
-5. Push your branch and open a Pull Request (PR) against the main repository.
+5. Push your branch and open a Pull Request (PR) against the `development_0.5` branch (not main).
 6. Request a review and address any feedback.
-7. Once approved, your PR will be merged.
+7. Once the milestone is reached, changes from `development_0.5` will be merged to `main`.
 
 ---
 
 ## Branching Strategy
 
 - **main**: Stable, production-ready code.
-- **dev**: Ongoing development and integration.
-- **feature/xxx**: New features (branch from dev).
-- **bugfix/xxx**: Bug fixes (branch from dev).
+- **development_0.5**: All ongoing development until June 2026. All developers should use this branch for features and bugfixes.
+- **feature/xxx**: New features (branch from development_0.5).
+- **bugfix/xxx**: Bug fixes (branch from development_0.5).
 - **hotfix/xxx**: Urgent fixes (branch from main).
 
 ---
@@ -42,6 +42,7 @@ This document describes the development workflow, testing, static analysis, and 
 ## Pull Requests & Code Review
 
 - All changes must go through a Pull Request (PR).
+- PRs must be made against the `development_0.5` branch, not `main`.
 - PRs should be linked to an issue or feature request when possible.
 - Ensure your code passes all checks (formatting, lint, tests).
 - At least one reviewer must approve before merging.
@@ -62,10 +63,6 @@ Typical CI checks include:
 - cargo tarpaulin (coverage, optional)
 
 ---
-
-## Static analysis
-
-...existing code...
 
 ## Static analysis
 
@@ -213,9 +210,12 @@ cargo test
 
 Integration tests should be placed in the `tests/` directory of each crate. For more information, refer to the [Rust documentation](https://doc.rust-lang.org/rust-by-example/testing/integration_testing.html).
 
+
 ### Code Coverage
 
 Use [cargo-tarpaulin](https://crates.io/crates/cargo-tarpaulin) to measure test coverage (see above for usage).
+
+**Required:** Code coverage must be at least 80% for a PR to be accepted.
 
 ---
 
