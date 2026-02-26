@@ -1,0 +1,52 @@
+name: CI Dispatcher
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      rust_changed: ${{ steps.filter.outputs.rust }}
+      doc_changed: ${{ steps.filter.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            rust:
+              - 'timpani_rust/**/*.rs'
+              - 'timpani_rust/**/*.toml'
+              - 'timpani_rust/Cargo.lock'
+              - '.github/workflows/run-rust-ci.yml'
+              - 'timpani_rust/Dockerfile'
+              - 'scripts/*.sh'
+            docs:
+              - '**/*.md'
+              - '.github/workflows/run-doc.yml'
+
+  run-rust-ci:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.rust_changed == 'true'
+    uses: ./.github/workflows/run-rust-ci.yml
+
+  run-doc-lint:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.doc_changed == 'true'
+    uses: ./.github/workflows/run-doc.yml
+
+  ci-summary:
+    name: CI Complete Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - run-rust-ci
+      - run-doc-lint
+    steps:
+      - run: echo "All CI jobs (if triggered) have completed."
