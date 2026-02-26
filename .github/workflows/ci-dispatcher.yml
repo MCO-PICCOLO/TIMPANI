@@ -2,11 +2,7 @@ name: CI Dispatcher
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-
+  
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
