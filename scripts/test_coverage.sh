@@ -6,7 +6,7 @@ set -euo pipefail
 LOG_FILE="dist/coverage/test_coverage_log.txt"
 COVERAGE_ROOT="dist/coverage"
 PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT/timpani_rust"
 mkdir -p "$COVERAGE_ROOT"
 rm -f "$LOG_FILE"
 touch "$LOG_FILE"

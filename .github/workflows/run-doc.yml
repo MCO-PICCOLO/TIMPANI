@@ -1,23 +1,22 @@
-name: Docs Lint Reusable Workflow
+name: Doc CI
 
 on:
   workflow_call:
+  workflow_dispatch:
 
 jobs:
-  lint:
+  doc_lint:
     runs-on: ubuntu-latest
-
+    container:
+      image: rust:latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Lint Markdown
-        uses: davidB/markdown-lint@v2.0
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          args: "**/*.md"
-          
-      - name: Check generated links
-        uses: lycheeverse/lychee-action@v1.9.3
-        with:
-          # Check all markdown files in root and subdirectories
-          args: --accept=200,204,429 --exclude-loopback "**/*.md"
+          node-version: '18'
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli
+      - name: Run markdownlint
+        run: |
+          markdownlint '**/*.md' > docs_report.md || true

@@ -13,7 +13,7 @@ rm -f "$LOG_FILE" "$TMP_FILE" "$REPORT_FILE"
 echo "Running Cargo fmt..." | tee -a "$LOG_FILE"
 
 PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT/timpani_rust"
 
 if cargo fmt --all -- --check | tee "$TMP_FILE"; then
   echo "✅ Format passed clean." | tee -a "$LOG_FILE"

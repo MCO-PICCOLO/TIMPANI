@@ -13,7 +13,7 @@ rm -f "$LOG_FILE" "$TMP_FILE" "$REPORT_FILE"
 echo "Running cargo-deny checks..." | tee -a "$LOG_FILE"
 
 PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT/timpani_rust"
 
 if ! command -v cargo-deny &>/dev/null; then
   echo "📦 Installing cargo-deny..." | tee -a "$LOG_FILE"
