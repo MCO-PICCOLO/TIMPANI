@@ -1,6 +1,16 @@
-[package]
-name = "timpani_rust"
-version = "0.1.0"
-edition = "2024"
+# SPDX-FileCopyrightText: Copyright 2024 LG Electronics Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
 
-[dependencies]
+[workspace]
+resolver = "2"
+
+members = [
+    "timpani-n",
+    "timpani-o"
+]
+exclude = [
+
+]
+
+[workspace.dependencies]
