@@ -1,3 +1,8 @@
+#<!--
+#* SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+#* SPDX-License-Identifier: MIT
+#-->
+
 # Real-time Sample Applications
 
 이 프로젝트는 실시간 시스템 분석을 위한 샘플 애플리케이션입니다. 주기적 실행, 데드라인 모니터링, 런타임 통계 수집 기능을 제공합니다.

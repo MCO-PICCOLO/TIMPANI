@@ -1,10 +1,10 @@
-<!--
-* SPDX-FileCopyrightText: Copyright 2024 LG Electronics Inc.
-* SPDX-License-Identifier: Apache-2.0
--->
+#<!--
+#* SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+#* SPDX-License-Identifier: MIT
+#-->
 # GitHub Development Workflow Guidelines
 
-**Date**: 2026-02-17  
+**Date**: 2026-02-17
 **Author**: basheer_LGSI
 
 ## Table of Contents
@@ -190,7 +190,7 @@ Closes #
 ```
 ---
 
-## 4. Labeling Rules By Stage 
+## 4. Labeling Rules By Stage
 
 ### Label System
 
