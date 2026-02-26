@@ -1,4 +1,9 @@
 
+<!--
+* SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+* SPDX-License-Identifier: MIT
+-->
+
 # Project Structure
 
 This document describes the current structure of the TIMPANI repository. All files and folders listed here are considered stable and will remain untouched in the future, except for the `timpani_rust` folder, which will be the sole focus of ongoing development.

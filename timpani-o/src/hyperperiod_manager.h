@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+ * SPDX-License-Identifier: MIT
+ */
+
+
 #ifndef HYPERPERIOD_MANAGER_H
 #define HYPERPERIOD_MANAGER_H
 
@@ -15,7 +21,7 @@ struct HyperperiodInfo {
     uint64_t hyperperiod_us;        // Hyperperiod in microseconds
     std::vector<uint64_t> periods;  // All unique periods in this workload
     size_t task_count;              // Number of tasks in this workload
-    
+
     HyperperiodInfo() : hyperperiod_us(0), task_count(0) {}
 };
 
@@ -33,7 +39,7 @@ public:
      * @param tasks Vector of tasks belonging to this workload
      * @return Calculated hyperperiod in microseconds
      */
-    uint64_t CalculateHyperperiod(const std::string& workload_id, 
+    uint64_t CalculateHyperperiod(const std::string& workload_id,
                                   const std::vector<Task>& tasks);
 
     /**

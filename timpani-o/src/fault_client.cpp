@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+ * SPDX-License-Identifier: MIT
+ */
+
 #include <iostream>
 
 #include "tlog.h"
@@ -7,6 +12,7 @@ FaultServiceClient& FaultServiceClient::GetInstance()
 {
     static FaultServiceClient instance;
     return instance;
+
 }
 
 bool FaultServiceClient::Initialize(const std::string& server_address)

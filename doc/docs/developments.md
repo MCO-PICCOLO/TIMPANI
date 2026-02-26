@@ -1,4 +1,9 @@
 
+<!--
+* SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+* SPDX-License-Identifier: MIT
+-->
+
 # TIMPANI Development Guide
 
 This document describes the development workflow, testing, static analysis, and best practices for contributing to the TIMPANI project.

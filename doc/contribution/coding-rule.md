@@ -1,7 +1,7 @@
-<!--
-* SPDX-FileCopyrightText: Copyright 2024 LG Electronics Inc.
-* SPDX-License-Identifier: Apache-2.0
--->
+#<!--
+#* SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+#* SPDX-License-Identifier: MIT
+#-->
 # Timpani Coding Specification
 
 Our Timpani is developed using the Rust Programming language for the language semantics and rust usage the developers shall refer and use the standard rust documentation publicly available

@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+ * SPDX-License-Identifier: MIT
+ */
+
 #include <stdlib.h>	// malloc(), free()
 #include <string.h>	// memcpy()
 #include <arpa/inet.h>	// htonl(), htons()
