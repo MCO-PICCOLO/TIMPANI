@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-LOG_FILE="build_results.log"
-TMP_FILE="build_output.txt"
+PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
+LOG_FILE="$PROJECT_ROOT/build_results.log"
+TMP_FILE="$PROJECT_ROOT/build_output.txt"
 rm -f "$LOG_FILE" "$TMP_FILE"
 
 echo "Running Cargo Build..." | tee -a "$LOG_FILE"
 
-PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
 git config --global --add safe.directory "$PROJECT_ROOT" || true
 cd "$PROJECT_ROOT/timpani_rust"
 

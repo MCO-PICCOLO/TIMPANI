@@ -3,16 +3,16 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-LOG_FILE="fmt_results.log"
-TMP_FILE="fmt_output.txt"
-mkdir -p dist/reports/fmt
-REPORT_FILE="dist/reports/fmt/fmt_summary.md"
+PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
+LOG_FILE="$PROJECT_ROOT/fmt_results.log"
+TMP_FILE="$PROJECT_ROOT/fmt_output.txt"
+mkdir -p "$PROJECT_ROOT/dist/reports/fmt"
+REPORT_FILE="$PROJECT_ROOT/dist/reports/fmt/fmt_summary.md"
 
 rm -f "$LOG_FILE" "$TMP_FILE" "$REPORT_FILE"
 
 echo "Running Cargo fmt..." | tee -a "$LOG_FILE"
 
-PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
 cd "$PROJECT_ROOT/timpani_rust"
 
 if cargo fmt --all -- --check | tee "$TMP_FILE"; then

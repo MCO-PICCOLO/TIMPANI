@@ -3,16 +3,16 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-LOG_FILE="deny_results.log"
-TMP_FILE="deny_output.txt"
-mkdir -p dist/reports/deny
-REPORT_FILE="dist/reports/deny/deny_summary.md"
+PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
+LOG_FILE="$PROJECT_ROOT/deny_results.log"
+TMP_FILE="$PROJECT_ROOT/deny_output.txt"
+mkdir -p "$PROJECT_ROOT/dist/reports/deny"
+REPORT_FILE="$PROJECT_ROOT/dist/reports/deny/deny_summary.md"
 
 rm -f "$LOG_FILE" "$TMP_FILE" "$REPORT_FILE"
 
 echo "Running cargo-deny checks..." | tee -a "$LOG_FILE"
 
-PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
 cd "$PROJECT_ROOT/timpani_rust"
 
 if ! command -v cargo-deny &>/dev/null; then
