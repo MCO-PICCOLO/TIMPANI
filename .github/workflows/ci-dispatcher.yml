@@ -2,7 +2,7 @@ name: CI Dispatcher
 
 on:
   workflow_dispatch:
-
+permissions: write-all
 jobs:
   #  Job 1: Detect file changes and conditionally trigger jobs based on them
   detect-changes:
