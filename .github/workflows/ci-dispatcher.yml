@@ -3,6 +3,9 @@ name: CI Dispatcher
 on:
   workflow_dispatch:
   
+permissions:
+  packages: write
+
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
