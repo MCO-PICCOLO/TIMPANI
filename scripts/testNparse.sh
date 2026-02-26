@@ -3,16 +3,16 @@
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
 
-LOG_FILE="test_results.log"
-TMP_FILE="test_output.json"
-mkdir -p dist/tests target
-REPORT_FILE="dist/tests/test_summary.xml"
+PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
+LOG_FILE="$PROJECT_ROOT/test_results.log"
+TMP_FILE="$PROJECT_ROOT/test_output.json"
+mkdir -p "$PROJECT_ROOT/dist/tests" "$PROJECT_ROOT/target"
+REPORT_FILE="$PROJECT_ROOT/dist/tests/test_summary.xml"
 
 rm -f "$LOG_FILE" "$TMP_FILE" "$REPORT_FILE"
 
 echo "Running Cargo Tests..." | tee -a "$LOG_FILE"
 
-PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
 cd "$PROJECT_ROOT/timpani_rust"
 
 if RUSTC_BOOTSTRAP=1 cargo test --workspace -- -Z unstable-options --format json > "$TMP_FILE" 2>>"$LOG_FILE"; then
