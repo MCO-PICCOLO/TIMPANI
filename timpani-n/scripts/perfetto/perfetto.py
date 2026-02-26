@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # vim: set sw=4 ts=4 et:
 
-# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
 # SPDX-License-Identifier: MIT
 
 import sys

@@ -1,5 +1,5 @@
 ## SPDX header
-# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
 # SPDX-License-Identifier: MIT
 
 set(CMAKE_SYSTEM_NAME Linux)

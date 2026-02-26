@@ -1,4 +1,4 @@
-## SPDX-FileCopyrightText: Copyright 2026 Timpani
+## SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
 ## SPDX-License-Identifier: MIT
 
 set(LIBBPF_SOURCE_DIR ${CMAKE_SOURCE_DIR}/libbpf/src)

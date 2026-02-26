@@ -1,5 +1,5 @@
 ## SPDX header
-# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
 # SPDX-License-Identifier: MIT
 
 cmake_minimum_required(VERSION 3.5)
