@@ -14,6 +14,8 @@ touch "$LOG_FILE"
 echo "🧪 Starting test coverage collection..." | tee -a "$LOG_FILE"
 
 cd "$PROJECT_ROOT/timpani_rust"
+
+if ! command -v cargo-tarpaulin &>/dev/null; then
   echo "📦 Installing cargo-tarpaulin..." | tee -a "$LOG_FILE"
   cargo install cargo-tarpaulin
 fi
