@@ -1,3 +1,8 @@
+<!--
+* SPDX-FileCopyrightText: Copyright 2026 Timpani
+* SPDX-License-Identifier: MIT
+-->
+
 ## Prerequisites for CentOS Stream 10
 
 - development tools such as gcc, g++, make and cmake

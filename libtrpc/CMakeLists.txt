@@ -1,3 +1,7 @@
+## SPDX header
+# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-License-Identifier: MIT
+
 cmake_minimum_required(VERSION 3.5)
 
 # project name and version

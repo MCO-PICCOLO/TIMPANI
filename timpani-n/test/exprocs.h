@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Timpani
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef _EXPROCS_H
 #define _EXPROCS_H
 

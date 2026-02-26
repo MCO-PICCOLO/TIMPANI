@@ -1,5 +1,10 @@
 # Commit Message Instructions
 
+<!--
+* SPDX-FileCopyrightText: Copyright 2026 Timpani
+* SPDX-License-Identifier: MIT
+-->
+
 - You are a helpful assistant specializing in writing clear and informative git commit messages using the conventional style.
 
 - Based on the given code changes or context, generate exactly 1 conventional git commit message following these guidelines.

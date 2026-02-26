@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Timpani
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef SCHEDINFO_SERVICE_H
 #define SCHEDINFO_SERVICE_H
 

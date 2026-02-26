@@ -1,4 +1,9 @@
 
+<!--
+* SPDX-FileCopyrightText: Copyright 2026 Timpani
+* SPDX-License-Identifier: MIT
+-->
+
 # Getting Started with TIMPANI
 
 Welcome to the TIMPANI project! This guide will help you get up and running with the main components, sample applications, and documentation structure.

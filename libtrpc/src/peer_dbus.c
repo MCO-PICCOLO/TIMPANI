@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Timpani
+ * SPDX-License-Identifier: MIT
+ */
+
 #define _GNU_SOURCE		// required for accept4()
 #include <stdio.h>
 #include <stdlib.h>

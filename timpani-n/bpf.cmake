@@ -1,3 +1,6 @@
+## SPDX-FileCopyrightText: Copyright 2026 Timpani
+## SPDX-License-Identifier: MIT
+
 set(BPF_ARCH ${CMAKE_SYSTEM_PROCESSOR})
 
 if(NOT CMAKE_TOOLCHAIN_FILE)

@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Timpani
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef TLOG_H
 #define TLOG_H
 

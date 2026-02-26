@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Timpani
+ * SPDX-License-Identifier: MIT
+ */
+
 #include <gtest/gtest.h>
 #include <memory>
 #include <vector>

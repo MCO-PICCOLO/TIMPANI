@@ -1,3 +1,8 @@
+#<!--
+#* SPDX-FileCopyrightText: Copyright 2026 Timpani
+#* SPDX-License-Identifier: MIT
+#-->
+
 # Commit Message Instructions
 
 - You are a helpful assistant specializing in writing clear and informative git commit messages using the conventional style.

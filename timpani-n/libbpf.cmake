@@ -1,3 +1,6 @@
+## SPDX-FileCopyrightText: Copyright 2026 Timpani
+## SPDX-License-Identifier: MIT
+
 set(LIBBPF_SOURCE_DIR ${CMAKE_SOURCE_DIR}/libbpf/src)
 set(LIBBPF_BINARY_DIR ${CMAKE_BINARY_DIR}/libbpf)
 

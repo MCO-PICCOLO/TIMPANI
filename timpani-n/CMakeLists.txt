@@ -1,3 +1,7 @@
+## SPDX header
+# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-License-Identifier: MIT
+
 cmake_minimum_required(VERSION 3.5)
 
 # project name and version
@@ -51,16 +55,16 @@ endif()
 
 # timpani-n sources
 set(TIMPANI_N_SOURCES
-    src/main.c 
-	src/core.c 
-	src/hyperperiod.c 
+    src/main.c
+	src/core.c
+	src/hyperperiod.c
 	src/task.c
-    src/config.c 
-	src/trpc.c 
-	src/signal.c 
+    src/config.c
+	src/trpc.c
+	src/signal.c
 	src/cleanup.c
-    src/sched.c 
-	src/globals.c 
+    src/sched.c
+	src/globals.c
 	src/apex_monitor.c
 )
 

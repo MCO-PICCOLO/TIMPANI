@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.6)
+## SPDX header
+# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-License-Identifier: MIT
+
+cmake_minimum_required(VERSION 3.6)
 
 # project name and version
 project(sample_apps VERSION 0.1.0 DESCRIPTION "Timpani Sample Apps")

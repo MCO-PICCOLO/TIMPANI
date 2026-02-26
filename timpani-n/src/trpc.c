@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Timpani
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "internal.h"
 
 static int init_trpc_connection(const char *addr, int port, sd_bus **dbus_ret, sd_event **event_ret)

@@ -1,3 +1,8 @@
+#<!--
+#* SPDX-FileCopyrightText: Copyright 2026 Timpani
+#* SPDX-License-Identifier: MIT
+#-->
+
 # Real-time Sample Applications
 
 This project provides sample applications for real-time system analysis. It offers periodic execution, deadline monitoring, and runtime statistics collection capabilities.

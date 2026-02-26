@@ -1,3 +1,7 @@
+## SPDX header
+# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-License-Identifier: MIT
+
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR armhf)
 

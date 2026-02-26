@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 Timpani
+ * SPDX-License-Identifier: MIT
+ */
+
+
 #include "hyperperiod_manager.h"
 #include "tlog.h"
 #include <algorithm>
@@ -13,7 +19,7 @@ HyperperiodManager::~HyperperiodManager()
     Clear();
 }
 
-uint64_t HyperperiodManager::CalculateHyperperiod(const std::string& workload_id, 
+uint64_t HyperperiodManager::CalculateHyperperiod(const std::string& workload_id,
                                                   const std::vector<Task>& tasks)
 {
     if (tasks.empty()) {
@@ -49,7 +55,7 @@ uint64_t HyperperiodManager::CalculateHyperperiod(const std::string& workload_id
 
     // Convert set to vector for LCM calculation
     std::vector<uint64_t> periods(unique_periods.begin(), unique_periods.end());
-    
+
     // Calculate hyperperiod as LCM of all periods
     uint64_t hyperperiod = CalculateLcm(periods);
 
@@ -133,7 +139,7 @@ uint64_t HyperperiodManager::CalculateLcm(const std::vector<uint64_t>& periods)
     uint64_t result = periods[0];
     for (size_t i = 1; i < periods.size(); ++i) {
         result = Lcm(result, periods[i]);
-        
+
         // Sanity check for extremely large hyperperiods
         if (result > 3600000000ULL) { // 1 hour in microseconds
             TLOG_WARN("Hyperperiod is very large: ", result / 1000000, " seconds");

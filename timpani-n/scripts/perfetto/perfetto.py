@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # vim: set sw=4 ts=4 et:
 
+# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-License-Identifier: MIT
+
 import sys
 import os
 import os.path

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright 2026 Timpani
+# SPDX-License-Identifier: MIT
+
 cmake_minimum_required(VERSION 3.5)
 
 # Project name and version
@@ -16,7 +19,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 # This points to the libtrpc folder located at the same level as timpani-o
 if(EXISTS "${CMAKE_SOURCE_DIR}/../libtrpc")
     add_subdirectory("${CMAKE_SOURCE_DIR}/../libtrpc" "${CMAKE_BINARY_DIR}/libtrpc" EXCLUDE_FROM_ALL)
-    
+
     # Ensure headers for libtrpc are available to timpani-o
     include_directories("${CMAKE_SOURCE_DIR}/../libtrpc/src")
 else()

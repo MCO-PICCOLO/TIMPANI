@@ -1,3 +1,8 @@
+#<!--
+#* SPDX-FileCopyrightText: Copyright 2026 Timpani
+#* SPDX-License-Identifier: MIT
+#-->
+
 # Project Overview
 
 This `Timpani-O` project is a C++ application that interacts with a time-triggered scheduling system for real-time tasks.
