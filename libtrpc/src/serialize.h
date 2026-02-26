@@ -1,10 +1,14 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef _SERIALIZE_H_
 #define _SERIALIZE_H_
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 #define INITIAL_SERIAL_BUF_SIZE		32
 
 #define DATATYPE(_size)							\

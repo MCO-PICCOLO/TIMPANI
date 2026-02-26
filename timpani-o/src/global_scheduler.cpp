@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "global_scheduler.h"
 #include "tlog.h"
 

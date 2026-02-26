@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef _INTERNAL_H
 #define _INTERNAL_H
 
