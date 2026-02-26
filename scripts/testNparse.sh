@@ -13,7 +13,7 @@ rm -f "$LOG_FILE" "$TMP_FILE" "$REPORT_FILE"
 echo "Running Cargo Tests..." | tee -a "$LOG_FILE"
 
 PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT/timpani_rust"
 
 if RUSTC_BOOTSTRAP=1 cargo test --workspace -- -Z unstable-options --format json > "$TMP_FILE" 2>>"$LOG_FILE"; then
   echo "✅ Tests passed" | tee -a "$LOG_FILE"

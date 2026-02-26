@@ -13,7 +13,7 @@ rm -f "$LOG_FILE" "$TMP_FILE" "$REPORT_FILE"
 echo "Running Cargo clippy..." | tee -a "$LOG_FILE"
 
 PROJECT_ROOT=${GITHUB_WORKSPACE:-$(pwd)}
-cd "$PROJECT_ROOT"
+cd "$PROJECT_ROOT/timpani_rust"
 
 if cargo clippy --workspace --all-targets --all-features | tee "$TMP_FILE"; then
   echo "✅ Clippy passed clean." | tee -a "$LOG_FILE"
