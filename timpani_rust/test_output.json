@@ -1,8 +1,0 @@
-{ "type": "suite", "event": "started", "test_count": 1 }
-{ "type": "test", "event": "started", "name": "tests::test_greet" }
-{ "type": "test", "name": "tests::test_greet", "event": "ok" }
-{ "type": "suite", "event": "ok", "passed": 1, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 0, "exec_time": 0.000200676 }
-{ "type": "suite", "event": "started", "test_count": 1 }
-{ "type": "test", "event": "started", "name": "tests::test_greet" }
-{ "type": "test", "name": "tests::test_greet", "event": "ok" }
-{ "type": "suite", "event": "ok", "passed": 1, "failed": 0, "ignored": 0, "measured": 0, "filtered_out": 0, "exec_time": 0.000224113 }
