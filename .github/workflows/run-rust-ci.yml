@@ -2,6 +2,7 @@ name: Rust CI Reusable Workflow
 
 on:
   workflow_call:
+  workflow_dispatch: 
 
 permissions:
   packages: write
