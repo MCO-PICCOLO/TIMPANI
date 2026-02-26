@@ -114,4 +114,4 @@ jobs:
           build-args: |
             TARGETARCH
           tags: |
-            ${{ env.ContainerRegistry }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+            ${{ env.ContainerRegistry }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
