@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+ * SPDX-License-Identifier: MIT
+ */
+
 #ifndef NODE_CONFIG_H
 #define NODE_CONFIG_H
 

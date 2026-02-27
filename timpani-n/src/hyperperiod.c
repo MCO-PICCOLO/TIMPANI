@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+ * SPDX-License-Identifier: MIT
+ */
+
 #include "internal.h"
 
 tt_error_t init_hyperperiod(struct context *ctx, const char *workload_id, uint64_t hyperperiod_us, struct hyperperiod_manager *hp_mgr)

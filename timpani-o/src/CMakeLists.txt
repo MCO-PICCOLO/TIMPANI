@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+# SPDX-License-Identifier: MIT
+
 # Timpani-O executable
 add_executable(timpani-o
   main.cpp
