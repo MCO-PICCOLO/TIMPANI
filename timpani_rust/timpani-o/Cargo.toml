@@ -5,6 +5,7 @@
 name = "timpani-o"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 description = "Timpani-O global scheduler – Rust port of the C++ implementation"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
