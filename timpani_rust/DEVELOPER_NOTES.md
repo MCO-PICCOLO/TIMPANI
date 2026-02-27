@@ -1,3 +1,7 @@
+<!--
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+-->
 # Timpani-O Rust Port — Developer Notes
 
 This document records design decisions, deliberate departures from the C++

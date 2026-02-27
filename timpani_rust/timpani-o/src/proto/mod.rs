@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 /// Proto-generated modules.
 ///
 /// `tonic::include_proto!` expands to an `include!` of the file that

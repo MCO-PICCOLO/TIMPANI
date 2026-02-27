@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 //! Hyperperiod calculation and management.
 //!
 //! The hyperperiod of a set of periodic tasks is the Least Common Multiple

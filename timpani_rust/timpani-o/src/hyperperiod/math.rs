@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 //! Pure arithmetic helpers: GCD and checked LCM.
 //!
 //! These are free functions rather than methods so they can be used and tested

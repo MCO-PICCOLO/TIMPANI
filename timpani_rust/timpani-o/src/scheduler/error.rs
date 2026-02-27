@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 //! Structured error types for the Timpani-O global scheduler.
 //!
 //! Two error enums model the two failure layers:

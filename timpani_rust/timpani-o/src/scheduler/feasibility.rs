@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 //! Real-time scheduling feasibility analysis.
 //!
 //! # Status: implemented, pending management approval for enforcement

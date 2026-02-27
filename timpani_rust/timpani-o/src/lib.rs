@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 //! Timpani-O – global scheduler (Rust port)
 //!
 //! Module layout (filled in as the migration progresses):

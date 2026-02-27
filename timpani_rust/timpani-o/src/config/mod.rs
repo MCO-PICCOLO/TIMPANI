@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 //! Node configuration loading and management.
 //!
 //! This module mirrors the C++ `NodeConfig` struct and `NodeConfigManager` class

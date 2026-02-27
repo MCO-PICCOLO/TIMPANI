@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 /// Build script – compiles protobuf definitions into Rust source code.
 ///
 /// tonic-build wraps prost-build and additionally generates tonic server/client

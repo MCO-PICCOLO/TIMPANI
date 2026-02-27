@@ -1,3 +1,8 @@
+/*
+SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+SPDX-License-Identifier: MIT
+*/
+
 //! Core task data structures for the Timpani-O global scheduler.
 //!
 //! Two distinct types model the two sides of the scheduling pipeline:
