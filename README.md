@@ -23,11 +23,14 @@ Time Trigger component.
 ### [TIMPANI-O](timpani-o/README.md)
 TIMPANI-O component with gRPC & protobuf support.
 
-## � License
+### [TIMPANI Rust](timpani_rust/README.md)
+Rust port of the TIMPANI-O global scheduler.
+
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## �📖 Documentation Structure
+## 📖 Documentation Structure
 
 ```
 TIMPANI/
@@ -39,12 +42,14 @@ TIMPANI/
 │   ├── README.md               # Time trigger component
 │   ├── README.CentOS.md       # CentOS setup guide
 │   └── README.Ubuntu20.md     # Ubuntu setup guide
-└── timpani-o/
-    └── README.md               # Orchestrator component
+├── timpani-o/
+│   └── README.md               # Orchestrator component
+└── timpani_rust/
+    └── README.md               # Rust port of the global scheduler
 ```
 
 
 
 ---
 
-**Navigation:** [Sample Apps](sample-apps/) | [TIMPANI-N](timpani-n/) | [TIMPANI-O](timpani-o/)
+**Navigation:** [Sample Apps](sample-apps/) | [TIMPANI-N](timpani-n/) | [TIMPANI-O](timpani-o/) | [Rust](timpani_rust/README.md)

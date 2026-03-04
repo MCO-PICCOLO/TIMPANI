@@ -1,16 +1,8 @@
-# SPDX-FileCopyrightText: Copyright 2024 LG Electronics Inc.
-#
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
+# SPDX-License-Identifier: MIT
 
 [workspace]
-resolver = "2"
-
 members = [
-    "timpani-n",
-    "timpani-o"
+    "timpani-o",
 ]
-exclude = [
-
-]
-
-[workspace.dependencies]
+resolver = "2"
