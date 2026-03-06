@@ -7,12 +7,23 @@
 
 This repository contains three components:
 
+## Getting Started
+
+### Clone the Repository
+
+```bash
+git clone --recurse-submodules https://github.com/MCO-PICCOLO/TIMPANI.git
+cd TIMPANI
+```
+
+> **Note:** Use `--recurse-submodules` to automatically clone the required submodules (libbpf, etc.).
+
+Refer to the individual component READMEs below for specific build and setup instructions.
+
 ## Components
 
 ### [Sample Applications](sample-apps/README.md)
 Real-time sample applications for real-time system analysis. Provides periodic execution, deadline monitoring, and runtime statistics collection capabilities.
-
-- [Korean Documentation](sample-apps/README_kr.md)
 
 ### [TIMPANI-N (Time Trigger)](timpani-n/README.md)
 Time Trigger component.
