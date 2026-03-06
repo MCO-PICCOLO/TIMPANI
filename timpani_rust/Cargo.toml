@@ -4,5 +4,6 @@
 [workspace]
 members = [
     "timpani-o",
+    "timpani-n",
 ]
 resolver = "2"
