@@ -1082,6 +1082,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "timpani-n"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "thiserror",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "timpani-o"
 version = "0.1.0"
 dependencies = [
