@@ -37,15 +37,15 @@ use timpani_o::proto::schedinfo_v1::{
     long_about = None,
 )]
 struct Cli {
-    /// Port for the upstream SchedInfoService gRPC server (receives workloads from Piccolo).
+    /// Port for the upstream SchedInfoService gRPC server (receives workloads from Pullpiri).
     #[arg(short = 's', long = "sinfoport", default_value_t = 50052)]
     sinfo_port: u16,
 
-    /// FaultService host address (Piccolo gRPC endpoint).
+    /// FaultService host address (Pullpiri gRPC endpoint).
     #[arg(short = 'f', long = "faulthost", default_value = "localhost")]
     fault_host: String,
 
-    /// Port for the FaultService gRPC client (Piccolo endpoint).
+    /// Port for the FaultService gRPC client (Pullpiri endpoint).
     #[arg(short = 'p', long = "faultport", default_value_t = 50053)]
     fault_port: u16,
 
@@ -138,16 +138,16 @@ async fn main() {
     let node_config_manager = Arc::new(node_config_manager);
     let workload_store = new_workload_store();
 
-    // ── Fault client (lazy — connects to Piccolo on first RPC call) ───────────
-    let piccolo_addr = format!("http://{}:{}", cli.fault_host, cli.fault_port);
-    let fault_notifier = match FaultClient::connect_lazy(piccolo_addr.clone()) {
+    // ── Fault client (lazy — connects to Pullpiri on first RPC call) ──────────
+    let pullpiri_addr = format!("http://{}:{}", cli.fault_host, cli.fault_port);
+    let fault_notifier = match FaultClient::connect_lazy(pullpiri_addr.clone()) {
         Ok(n) => n,
         Err(e) => {
-            error!("Failed to build FaultClient for {piccolo_addr}: {e}");
+            error!("Failed to build FaultClient for {pullpiri_addr}: {e}");
             process::exit(1);
         }
     };
-    info!(addr = %piccolo_addr, "FaultClient ready (lazy connect)");
+    info!(addr = %pullpiri_addr, "FaultClient ready (lazy connect)");
 
     // ── gRPC service instances ────────────────────────────────────────────────
     let sched_info_svc = SchedInfoServiceImpl::new(
@@ -169,7 +169,7 @@ async fn main() {
         .parse()
         .expect("invalid node_port");
 
-    info!(addr = %sinfo_addr, "SchedInfoService starting (upstream — Piccolo)");
+    info!(addr = %sinfo_addr, "SchedInfoService starting (upstream — Pullpiri)");
     info!(addr = %node_addr,  "NodeService starting      (downstream — Timpani-N)");
 
     // ── Graceful shutdown — shared watch channel ──────────────────────────────
@@ -212,16 +212,16 @@ async fn main() {
 
     // ── Optional NotifyFault demo ─────────────────────────────────────────────
     //
-    // Matches C++ NotifyFaultDemo(): sends one synthetic fault to Piccolo after
+    // Matches C++ NotifyFaultDemo(): sends one synthetic fault to Pullpiri after
     // a short startup delay to verify the FaultService connection is reachable.
-    // Useful when you want to confirm the Piccolo side is listening without
+    // Useful when you want to confirm the Pullpiri side is listening without
     // needing a real deadline miss event.
     if cli.notify_fault {
         let notifier = Arc::clone(&fault_notifier);
         tokio::spawn(async move {
             // Give the servers a moment to bind before attempting the outbound call.
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            info!("--notifyfault: sending synthetic fault notification to Piccolo");
+            info!("--notifyfault: sending synthetic fault notification to Pullpiri");
             let result = notifier
                 .notify_fault(FaultNotification {
                     workload_id: "workload_demo".into(),

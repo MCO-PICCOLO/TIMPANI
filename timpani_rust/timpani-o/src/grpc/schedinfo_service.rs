@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
 SPDX-License-Identifier: MIT
 */
 
-//! `SchedInfoService` gRPC server — receives workloads from Piccolo.
+//! `SchedInfoService` gRPC server — receives workloads from Pullpiri.
 //!
 //! Implements the `AddSchedInfo` RPC:
 //!   1. Convert proto `TaskInfo` list → internal `Vec<Task>`.

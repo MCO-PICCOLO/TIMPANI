@@ -11,11 +11,11 @@ description = "Manual test simulators for Timpani-O — NOT for production"
 # ── Binaries ──────────────────────────────────────────────────────────────────
 
 [[bin]]
-# Simulates Piccolo:
+# Simulates Pullpiri:
 #   • Serves FaultService on --fault-port (receives deadline-miss notifications)
 #   • Reads a workload YAML and sends AddSchedInfo to Timpani-O
-name = "piccolo-sim"
-path = "src/bin/piccolo_sim.rs"
+name = "pullpiri-sim"
+path = "src/bin/pullpiri_sim.rs"
 
 [[bin]]
 # Simulates one or more Timpani-N nodes concurrently:

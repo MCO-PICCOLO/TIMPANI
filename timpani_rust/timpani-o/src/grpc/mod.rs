@@ -11,7 +11,7 @@ SPDX-License-Identifier: MIT
 //! # Concurrency model
 //!
 //! ```text
-//!   Piccolo ──AddSchedInfo──► SchedInfoServiceImpl
+//!   Pullpiri ──AddSchedInfo──► SchedInfoServiceImpl
 //!                                     │  writes
 //!                                     ▼
 //!                             WorkloadStore  (Arc<Mutex<Option<WorkloadState>>>)

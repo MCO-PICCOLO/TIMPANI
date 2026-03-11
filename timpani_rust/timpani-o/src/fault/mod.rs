@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
 SPDX-License-Identifier: MIT
 */
 
-//! Fault notification client for Piccolo's `FaultService`.
+//! Fault notification client for Pullpiri's `FaultService`.
 //!
 //! # Design vs C++ implementation
 //!
@@ -14,7 +14,7 @@ SPDX-License-Identifier: MIT
 //! In the Rust port all callbacks are async closures with captured state,
 //! so the singleton pattern is unnecessary.  `FaultClient` is injected as
 //! `Arc<dyn FaultNotifier>` wherever it is needed.  This makes the component
-//! testable without a live Piccolo server.
+//! testable without a live Pullpiri server.
 
 use std::sync::Arc;
 
@@ -28,7 +28,7 @@ use crate::proto::schedinfo_v1::{
 
 // ── FaultNotification ─────────────────────────────────────────────────────────
 
-/// Data carried in every fault notification sent to Piccolo.
+/// Data carried in every fault notification sent to Pullpiri.
 #[derive(Debug, Clone)]
 pub struct FaultNotification {
     pub workload_id: String,
@@ -39,7 +39,7 @@ pub struct FaultNotification {
 
 // ── FaultError ────────────────────────────────────────────────────────────────
 
-/// Errors that can occur when notifying Piccolo of a fault.
+/// Errors that can occur when notifying Pullpiri of a fault.
 #[derive(Debug, Error)]
 pub enum FaultError {
     /// tonic channel / endpoint construction failure.
@@ -50,14 +50,14 @@ pub enum FaultError {
     #[error("RPC status: {0}")]
     Rpc(#[from] tonic::Status),
 
-    /// The RPC succeeded but Piccolo returned a non-zero status code.
-    #[error("Piccolo returned non-zero status {0}")]
+    /// The RPC succeeded but Pullpiri returned a non-zero status code.
+    #[error("Pullpiri returned non-zero status {0}")]
     RemoteError(i32),
 }
 
 // ── FaultNotifier trait ───────────────────────────────────────────────────────
 
-/// Async interface for sending fault notifications to Piccolo.
+/// Async interface for sending fault notifications to Pullpiri.
 ///
 /// Implemented by [`FaultClient`] in production and by
 /// [`test_support::MockFaultNotifier`] in tests.
@@ -68,7 +68,7 @@ pub trait FaultNotifier: Send + Sync {
 
 // ── FaultClient ───────────────────────────────────────────────────────────────
 
-/// Production gRPC client for Piccolo's `FaultService`.
+/// Production gRPC client for Pullpiri's `FaultService`.
 ///
 /// Created once at startup and shared via `Arc<dyn FaultNotifier>`.
 pub struct FaultClient {
@@ -81,7 +81,7 @@ impl FaultClient {
     /// Create a fault client that connects lazily to `addr`.
     ///
     /// The TCP connection is not established until the first RPC call.
-    /// This avoids a hard startup ordering dependency on Piccolo being live
+    /// This avoids a hard startup ordering dependency on Pullpiri being live
     /// when Timpani-O starts.
     ///
     /// `addr` must be a full URI, e.g. `"http://localhost:50053"`.
@@ -106,7 +106,7 @@ impl FaultNotifier for FaultClient {
             workload_id = %info.workload_id,
             node_id     = %info.node_id,
             task_name   = %info.task_name,
-            "Notifying Piccolo of fault"
+            "Notifying Pullpiri of fault"
         );
 
         // Clone is cheap — Channel is Arc-backed.
@@ -134,7 +134,7 @@ pub mod test_support {
     /// A no-op `FaultNotifier` that records calls.
     ///
     /// Use in unit tests to assert that the correct fault notifications are
-    /// generated without needing a live Piccolo server.
+    /// generated without needing a live Pullpiri server.
     pub struct MockFaultNotifier {
         pub calls: Mutex<Vec<FaultNotification>>,
     }

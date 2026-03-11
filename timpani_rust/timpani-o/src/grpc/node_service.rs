@@ -11,7 +11,7 @@ SPDX-License-Identifier: MIT
 //! |---------------|-----------------------------|--------------------------------------|
 //! | `GetSchedInfo`  | `trpc_client_schedinfo`   | Timpani-N pulls its task list        |
 //! | `SyncTimer`     | `trpc_client_sync`        | Barrier — all nodes start together   |
-//! | `ReportDMiss`   | `trpc_client_dmiss`       | Deadline miss forwarded to Piccolo   |
+//! | `ReportDMiss`   | `trpc_client_dmiss`       | Deadline miss forwarded to Pullpiri  |
 //!
 //! # SyncTimer barrier design
 //!
@@ -43,6 +43,10 @@ use crate::proto::schedinfo_v1::{
 use super::{BarrierStatus, WorkloadStore};
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+/// Nanoseconds in one second — used to split a nanosecond timestamp into
+/// `(seconds, nanoseconds)` matching `struct timespec`.
+const NANOS_PER_SEC: i64 = 1_000_000_000;
 
 /// Offset added to `now` when computing the barrier start time.
 ///
@@ -94,7 +98,7 @@ fn compute_start_time() -> (i64, i32) {
         .unwrap_or_default()
         .as_nanos() as i64;
     let start_ns = now_ns + SYNC_START_OFFSET_NS;
-    (start_ns / 1_000_000_000, (start_ns % 1_000_000_000) as i32)
+    (start_ns / NANOS_PER_SEC, (start_ns % NANOS_PER_SEC) as i32)
 }
 
 /// Convert an internal `SchedTask` to the proto wire type `ScheduledTask`.
@@ -364,7 +368,7 @@ impl NodeService for NodeServiceImpl {
             }
         };
 
-        // Forward the fault to Piccolo.
+        // Forward the fault to Pullpiri.
         let notification = FaultNotification {
             workload_id,
             node_id,
@@ -373,7 +377,7 @@ impl NodeService for NodeServiceImpl {
         };
 
         if let Err(e) = self.fault_notifier.notify_fault(notification).await {
-            error!(error = %e, "Failed to notify Piccolo of deadline miss");
+            error!(error = %e, "Failed to notify Pullpiri of deadline miss");
             return Ok(Response::new(NodeResponse {
                 status: -1,
                 error_message: format!("fault notification failed: {e}"),

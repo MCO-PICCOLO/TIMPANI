@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proto_root = "./proto";
 
     // All proto files to compile.
-    //   schedinfo.proto    — SchedInfoService (Piccolo → Timpani-O) + FaultService
+    //   schedinfo.proto    — SchedInfoService (Pullpiri → Timpani-O) + FaultService
     //   node_service.proto — NodeService (Timpani-N → Timpani-O)
     let proto_files = [
         format!("{}/schedinfo.proto", proto_root),
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         // Generate both server and client stubs for every service.
         // Servers: SchedInfoService, NodeService (Timpani-O serves these).
-        // Client:  FaultService (Timpani-O calls Piccolo).
+        // Client:  FaultService (Timpani-O calls Pullpiri).
         .build_server(true)
         .build_client(true)
         // Derive serde Serialize/Deserialize on every generated message so we can

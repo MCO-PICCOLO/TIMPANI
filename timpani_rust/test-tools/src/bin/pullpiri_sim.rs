@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: Copyright 2026 LG Electronics Inc.
 SPDX-License-Identifier: MIT
 */
 
-//! piccolo-sim — manual test simulator for Piccolo's two roles:
+//! pullpiri-sim — manual test simulator for Pullpiri's two roles:
 //!
 //! **Role 1 — Client**: reads a workload YAML, sends `AddSchedInfo` to
 //! Timpani-O's upstream gRPC port.
@@ -16,14 +16,14 @@ SPDX-License-Identifier: MIT
 //! # Terminal 1: start Timpani-O first
 //! cargo run --bin timpani-o -- --nodeconfig ../../timpani-o/examples/node_configurations.yaml
 //!
-//! # Terminal 2: start piccolo-sim
-//! cargo run --bin piccolo-sim -- --workload test-tools/workloads/example_workload.yaml
+//! # Terminal 2: start pullpiri-sim
+//! cargo run --bin pullpiri-sim -- --workload test-tools/workloads/example_workload.yaml
 //!
 //! # Terminal 3: start node-sim (fires the sync barrier, then sends a deadline miss)
 //! cargo run --bin node-sim -- --nodes node01,node02,node03 --dmiss node01:task_safety
 //! ```
 //!
-//! piccolo-sim will then print:
+//! pullpiri-sim will then print:
 //!   ✅  AddSchedInfo succeeded
 //!   🔔  FAULT: workload=test_workload node=node01 task=task_safety type=DMISS
 
@@ -46,8 +46,8 @@ use timpani_o::proto::schedinfo_v1::{
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "piccolo-sim",
-    about = "Piccolo simulator: sends AddSchedInfo and receives fault notifications"
+    name = "pullpiri-sim",
+    about = "Pullpiri simulator: sends AddSchedInfo and receives fault notifications"
 )]
 struct Cli {
     /// Host where Timpani-O SchedInfoService is listening.
@@ -71,10 +71,10 @@ struct Cli {
 // ── FaultService implementation ───────────────────────────────────────────────
 
 /// Receives `NotifyFault` calls from Timpani-O and logs them.
-struct PiccoloFaultService;
+struct PullpiriFaultService;
 
 #[tonic::async_trait]
-impl FaultService for PiccoloFaultService {
+impl FaultService for PullpiriFaultService {
     async fn notify_fault(
         &self,
         request: Request<FaultInfo>,
@@ -128,7 +128,7 @@ async fn main() -> Result<()> {
     let fault_server = {
         let mut rx = shutdown_rx.clone();
         Server::builder()
-            .add_service(FaultServiceServer::new(PiccoloFaultService))
+            .add_service(FaultServiceServer::new(PullpiriFaultService))
             .serve_with_shutdown(fault_addr, async move {
                 while !*rx.borrow() {
                     rx.changed().await.ok();
@@ -203,7 +203,7 @@ async fn main() -> Result<()> {
 
     tokio::signal::ctrl_c().await?;
 
-    info!("Shutdown signal received — stopping piccolo-sim");
+    info!("Shutdown signal received — stopping pullpiri-sim");
     let _ = shutdown_tx.send(true);
 
     Ok(())

@@ -14,7 +14,7 @@ SPDX-License-Identifier: MIT
 //!
 //! # Usage
 //! ```text
-//! # After piccolo-sim has sent AddSchedInfo:
+//! # After pullpiri-sim has sent AddSchedInfo:
 //! cargo run --bin node-sim -- \
 //!     --nodes node01,node02,node03 \
 //!     --dmiss node01:task_safety \
@@ -268,7 +268,7 @@ async fn simulate_node(
             if dr.status == 0 {
                 info!(
                     "[{node_id}] ✅  ReportDMiss acknowledged — \
-                       Timpani-O will forward to Piccolo's FaultService"
+                       Timpani-O will forward to Pullpiri's FaultService"
                 );
             } else {
                 warn!(
