@@ -220,6 +220,24 @@ impl NodeConfigManager {
     }
 }
 
+// ── Test helpers ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+impl NodeConfigManager {
+    /// Construct a `NodeConfigManager` directly from a list of `NodeConfig` values.
+    ///
+    /// Only available in test builds.  Use [`load_from_file`](Self::load_from_file)
+    /// in production.  This avoids the need for a temp file in unit tests that
+    /// require a populated node configuration.
+    pub fn from_nodes(nodes: Vec<NodeConfig>) -> Self {
+        let nodes_map = nodes.into_iter().map(|n| (n.name.clone(), n)).collect();
+        Self {
+            nodes: nodes_map,
+            loaded: true,
+        }
+    }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]

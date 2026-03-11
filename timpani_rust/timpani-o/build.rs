@@ -16,24 +16,38 @@ SPDX-License-Identifier: MIT
 /// Install on Ubuntu/Debian: `sudo apt install -y protobuf-compiler`
 /// Install on macOS:          `brew install protobuf`
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Path to the proto source relative to this crate's root
-    // (rust/timpani-o/ → ../../timpani-o/proto/)
-    let proto_root = "../../timpani-o/proto";
-    let proto_file = format!("{}/schedinfo.proto", proto_root);
+    // Path to the proto source relative to this crate's root.
+    // Both proto files now live inside the Rust project itself so that the
+    // crate can be built without the C++ tree present alongside it.
+    let proto_root = "./proto";
 
-    // Tell Cargo to re-run this build script when the proto file changes
-    println!("cargo:rerun-if-changed={}", proto_file);
+    // All proto files to compile.
+    //   schedinfo.proto    — SchedInfoService (Pullpiri → Timpani-O) + FaultService
+    //   node_service.proto — NodeService (Timpani-N → Timpani-O)
+    let proto_files = [
+        format!("{}/schedinfo.proto", proto_root),
+        format!("{}/node_service.proto", proto_root),
+    ];
+
+    // Tell Cargo to re-run this build script when any proto file changes.
+    for f in &proto_files {
+        println!("cargo:rerun-if-changed={}", f);
+    }
+
+    let proto_refs: Vec<&str> = proto_files.iter().map(String::as_str).collect();
 
     tonic_build::configure()
-        // Generate both server (SchedInfoService) and client (FaultService) stubs
+        // Generate both server and client stubs for every service.
+        // Servers: SchedInfoService, NodeService (Timpani-O serves these).
+        // Client:  FaultService (Timpani-O calls Pullpiri).
         .build_server(true)
         .build_client(true)
         // Derive serde Serialize/Deserialize on every generated message so we can
         // (de)serialise them easily in tests and logging.
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
         .compile_protos(
-            &[proto_file.as_str()], // proto files to compile
-            &[proto_root],          // directories to search for imports
+            &proto_refs,   // proto files to compile
+            &[proto_root], // directories to search for imports
         )?;
 
     Ok(())

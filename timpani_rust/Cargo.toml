@@ -4,5 +4,6 @@
 [workspace]
 members = [
     "timpani-o",
+    "test-tools",
 ]
 resolver = "2"

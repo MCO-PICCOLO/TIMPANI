@@ -168,3 +168,111 @@ pub enum SchedulerError {
     #[error("no schedulable node found for task '{task}'")]
     NoSchedulableNode { task: String },
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── AdmissionReason Display ───────────────────────────────────────────────
+
+    #[test]
+    fn admission_node_not_found_display() {
+        let r = AdmissionReason::NodeNotFound {
+            node: "node99".into(),
+        };
+        assert!(r.to_string().contains("node99"));
+    }
+
+    #[test]
+    fn admission_insufficient_memory_display() {
+        let r = AdmissionReason::InsufficientMemory {
+            required_mb: 8192,
+            available_mb: 4096,
+        };
+        let s = r.to_string();
+        assert!(s.contains("8192"));
+        assert!(s.contains("4096"));
+    }
+
+    #[test]
+    fn admission_cpu_affinity_unavailable_display() {
+        let r = AdmissionReason::CpuAffinityUnavailable { requested_cpu: 7 };
+        assert!(r.to_string().contains('7'));
+    }
+
+    #[test]
+    fn admission_cpu_utilization_exceeded_display() {
+        let r = AdmissionReason::CpuUtilizationExceeded {
+            cpu: 2,
+            current: 0.85,
+            added: 0.10,
+            threshold: 0.90,
+        };
+        let s = r.to_string();
+        assert!(s.contains("CPU 2"));
+        assert!(s.contains("90")); // threshold percentage
+    }
+
+    #[test]
+    fn admission_no_available_cpu_display() {
+        assert!(!AdmissionReason::NoAvailableCpu.to_string().is_empty());
+    }
+
+    // ── SchedulerError Display ────────────────────────────────────────────────
+
+    #[test]
+    fn error_no_tasks_display() {
+        assert!(SchedulerError::NoTasks.to_string().contains("empty"));
+    }
+
+    #[test]
+    fn error_config_not_loaded_display() {
+        assert!(SchedulerError::ConfigNotLoaded
+            .to_string()
+            .contains("configuration"));
+    }
+
+    #[test]
+    fn error_unknown_algorithm_display() {
+        let e = SchedulerError::UnknownAlgorithm("my_algo".into());
+        assert!(e.to_string().contains("my_algo"));
+    }
+
+    #[test]
+    fn error_missing_workload_id_display() {
+        let e = SchedulerError::MissingWorkloadId {
+            task: "task1".into(),
+        };
+        assert!(e.to_string().contains("task1"));
+    }
+
+    #[test]
+    fn error_missing_target_node_display() {
+        let e = SchedulerError::MissingTargetNode {
+            task: "task2".into(),
+        };
+        assert!(e.to_string().contains("task2"));
+    }
+
+    #[test]
+    fn error_admission_rejected_display() {
+        let e = SchedulerError::AdmissionRejected {
+            task: "task3".into(),
+            node: "node01".into(),
+            reason: AdmissionReason::NoAvailableCpu,
+        };
+        let s = e.to_string();
+        assert!(s.contains("task3"));
+        assert!(s.contains("node01"));
+    }
+
+    #[test]
+    fn error_no_schedulable_node_display() {
+        let e = SchedulerError::NoSchedulableNode {
+            task: "taskX".into(),
+        };
+        assert!(e.to_string().contains("taskX"));
+    }
+}

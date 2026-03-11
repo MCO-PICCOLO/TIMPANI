@@ -13,16 +13,14 @@ SPDX-License-Identifier: MIT
 //! ├── config/         – YAML node configuration
 //! ├── scheduler/      – three scheduling algorithms
 //! ├── hyperperiod/    – LCM / GCD helpers
-//! ├── grpc/           – gRPC server + client wiring  (pending)
-//! └── fault/          – fault reporting to Pullpiri  (pending)
+//! ├── grpc/           – gRPC server + client wiring
+//! └── fault/          – fault reporting to Pullpiri
 //! ```
 
 pub mod config;
+pub mod fault;
+pub mod grpc;
 pub mod hyperperiod;
 pub mod proto;
 pub mod scheduler;
 pub mod task;
-
-// Placeholders – uncommented as each module is implemented
-// pub mod grpc;
-// pub mod fault;
