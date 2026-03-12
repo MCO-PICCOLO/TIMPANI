@@ -257,14 +257,22 @@ impl Config {
         if self.prio < validation::PRIORITY_MIN || self.prio > validation::PRIORITY_MAX {
             eprintln!(
                 "[ERROR] Invalid priority: {} (must be {} or {}-{})",
-                self.prio, validation::PRIORITY_MIN, validation::PRIORITY_RT_MIN, validation::PRIORITY_MAX
+                self.prio,
+                validation::PRIORITY_MIN,
+                validation::PRIORITY_RT_MIN,
+                validation::PRIORITY_MAX
             );
             return Err(TimpaniError::Config);
         }
 
         // Port validation is already handled by u16 type (validation::PORT_MIN-validation::PORT_MAX)
         if self.port == validation::PORT_INVALID {
-            eprintln!("[ERROR] Invalid port: {} (must be {}-{})", validation::PORT_INVALID, validation::PORT_MIN, validation::PORT_MAX);
+            eprintln!(
+                "[ERROR] Invalid port: {} (must be {}-{})",
+                validation::PORT_INVALID,
+                validation::PORT_MIN,
+                validation::PORT_MAX
+            );
             return Err(TimpaniError::Config);
         }
 
@@ -331,35 +339,49 @@ mod tests {
 
     #[test]
     fn test_validate_invalid_priority() {
-        let mut config = Config::default();
-        config.prio = validation::PRIORITY_MAX + 1; // 100 is invalid
+        let config = Config {
+            prio: validation::PRIORITY_MAX + 1, // 100 is invalid
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        config.prio = validation::PRIORITY_MIN - 1; // -2 is invalid
+        let config = Config {
+            prio: validation::PRIORITY_MIN - 1, // -2 is invalid
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_validate_invalid_cpu() {
-        let mut config = Config::default();
-        config.cpu = 2000;
+        let config = Config {
+            cpu: 2000,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
 
-        config.cpu = -5;
+        let config = Config {
+            cpu: -5,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_validate_empty_node_id() {
-        let mut config = Config::default();
-        config.node_id = String::new();
+        let config = Config {
+            node_id: String::new(),
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_validate_invalid_port() {
-        let mut config = Config::default();
-        config.port = 0;
+        let config = Config {
+            port: 0,
+            ..Default::default()
+        };
         assert!(config.validate().is_err());
     }
 
@@ -399,16 +421,18 @@ mod tests {
 
     #[test]
     fn test_config_with_custom_values() {
-        let mut config = Config::default();
-        config.cpu = 4;
-        config.prio = 50;
-        config.port = 8888;
-        config.addr = "192.168.1.1".to_string();
-        config.node_id = "test-node".to_string();
-        config.enable_sync = true;
-        config.enable_plot = true;
-        config.enable_apex = true;
-        config.log_level = LogLevel::Debug;
+        let config = Config {
+            cpu: 4,
+            prio: 50,
+            port: 8888,
+            addr: "192.168.1.1".to_string(),
+            node_id: "test-node".to_string(),
+            enable_sync: true,
+            enable_plot: true,
+            enable_apex: true,
+            log_level: LogLevel::Debug,
+            ..Default::default()
+        };
 
         assert!(config.validate().is_ok());
         assert_eq!(config.cpu, 4);
@@ -424,34 +448,51 @@ mod tests {
 
     #[test]
     fn test_validate_valid_priority_range() {
-        let mut config = Config::default();
-
         // Test valid priorities
-        config.prio = -1;
+        let config = Config {
+            prio: -1,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
 
-        config.prio = 1;
+        let config = Config {
+            prio: 1,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
 
-        config.prio = 50;
+        let config = Config {
+            prio: 50,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
 
-        config.prio = 99;
+        let config = Config {
+            prio: 99,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_validate_valid_cpu_range() {
-        let mut config = Config::default();
-
         // Test valid CPU values
-        config.cpu = -1;
+        let config = Config {
+            cpu: -1,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
 
-        config.cpu = 0;
+        let config = Config {
+            cpu: 0,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
 
-        config.cpu = 1024;
+        let config = Config {
+            cpu: 1024,
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
     }
 
@@ -461,16 +502,18 @@ mod tests {
         let config = Config::default();
         config.log_config();
 
-        let mut config = Config::default();
-        config.cpu = 8;
-        config.prio = 75;
-        config.port = 9999;
-        config.addr = "10.0.0.1".to_string();
-        config.node_id = "node-test".to_string();
-        config.enable_sync = true;
-        config.enable_plot = true;
-        config.enable_apex = true;
-        config.log_level = LogLevel::Verbose;
+        let config = Config {
+            cpu: 8,
+            prio: 75,
+            port: 9999,
+            addr: "10.0.0.1".to_string(),
+            node_id: "node-test".to_string(),
+            enable_sync: true,
+            enable_plot: true,
+            enable_apex: true,
+            log_level: LogLevel::Verbose,
+            ..Default::default()
+        };
         config.log_config();
     }
 
@@ -638,8 +681,10 @@ mod tests {
     #[test]
     fn test_validate_all_log_levels() {
         for level_num in 0..=5 {
-            let mut config = Config::default();
-            config.log_level = LogLevel::from_u8(level_num).unwrap();
+            let config = Config {
+                log_level: LogLevel::from_u8(level_num).unwrap(),
+                ..Default::default()
+            };
             assert!(config.validate().is_ok());
         }
     }
@@ -647,33 +692,45 @@ mod tests {
     #[test]
     fn test_config_validation_all_errors() {
         // Test priority too high
-        let mut config = Config::default();
-        config.prio = 100;
+        let config = Config {
+            prio: 100,
+            ..Default::default()
+        };
         assert!(matches!(config.validate(), Err(TimpaniError::Config)));
 
         // Test priority too low
-        config = Config::default();
-        config.prio = -2;
+        let config = Config {
+            prio: -2,
+            ..Default::default()
+        };
         assert!(matches!(config.validate(), Err(TimpaniError::Config)));
 
         // Test CPU too high
-        config = Config::default();
-        config.cpu = 1025;
+        let config = Config {
+            cpu: 1025,
+            ..Default::default()
+        };
         assert!(matches!(config.validate(), Err(TimpaniError::Config)));
 
         // Test CPU too low
-        config = Config::default();
-        config.cpu = -2;
+        let config = Config {
+            cpu: -2,
+            ..Default::default()
+        };
         assert!(matches!(config.validate(), Err(TimpaniError::Config)));
 
         // Test port zero
-        config = Config::default();
-        config.port = 0;
+        let config = Config {
+            port: 0,
+            ..Default::default()
+        };
         assert!(matches!(config.validate(), Err(TimpaniError::Config)));
 
         // Test empty node_id
-        config = Config::default();
-        config.node_id = String::new();
+        let config = Config {
+            node_id: String::new(),
+            ..Default::default()
+        };
         assert!(matches!(config.validate(), Err(TimpaniError::Config)));
     }
 }

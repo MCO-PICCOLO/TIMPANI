@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: MIT
  */
 
-use timpani_n::{config::{Config, exit_codes}, init_logging, run_app};
+use timpani_n::{
+    config::{exit_codes, Config},
+    init_logging, run_app,
+};
 use tracing::error;
 
 fn main() -> anyhow::Result<()> {

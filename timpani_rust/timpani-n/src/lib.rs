@@ -80,11 +80,13 @@ mod tests {
 
     #[test]
     fn test_run_app_with_custom_config() {
-        let mut config = Config::default();
-        config.cpu = config::test_values::TEST_CPU_AFFINITY;
-        config.prio = config::test_values::TEST_PRIORITY;
-        config.node_id = config::test_values::TEST_NODE_ID.to_string();
-        config.log_level = config::LogLevel::Debug;
+        let config = Config {
+            cpu: config::test_values::TEST_CPU_AFFINITY,
+            prio: config::test_values::TEST_PRIORITY,
+            node_id: config::test_values::TEST_NODE_ID.to_string(),
+            log_level: config::LogLevel::Debug,
+            ..Default::default()
+        };
 
         assert!(run_app(config).is_ok());
     }
@@ -117,14 +119,18 @@ mod tests {
         assert!(run_app(config).is_ok());
 
         // Test with various configurations
-        let mut config = Config::default();
-        config.cpu = config::test_values::TEST_CPU_ZERO;
-        config.prio = config::test_values::TEST_PRIORITY_LOW;
+        let config = Config {
+            cpu: config::test_values::TEST_CPU_ZERO,
+            prio: config::test_values::TEST_PRIORITY_LOW,
+            ..Default::default()
+        };
         assert!(run_app(config).is_ok());
 
-        let mut config = Config::default();
-        config.enable_sync = true;
-        config.enable_plot = true;
+        let config = Config {
+            enable_sync: true,
+            enable_plot: true,
+            ..Default::default()
+        };
         assert!(run_app(config).is_ok());
     }
 
@@ -184,22 +190,19 @@ mod tests {
         // Test various initialization and run combinations
         let configs = vec![
             Config::default(),
-            {
-                let mut c = Config::default();
-                c.cpu = config::test_values::TEST_CPU_ONE;
-                c
+            Config {
+                cpu: config::test_values::TEST_CPU_ONE,
+                ..Default::default()
             },
-            {
-                let mut c = Config::default();
-                c.prio = config::test_values::TEST_PRIORITY_MID;
-                c
+            Config {
+                prio: config::test_values::TEST_PRIORITY_MID,
+                ..Default::default()
             },
-            {
-                let mut c = Config::default();
-                c.enable_sync = true;
-                c.enable_plot = true;
-                c.enable_apex = true;
-                c
+            Config {
+                enable_sync: true,
+                enable_plot: true,
+                enable_apex: true,
+                ..Default::default()
             },
         ];
 
@@ -214,16 +217,22 @@ mod tests {
     #[test]
     fn test_error_handling_in_run_app() {
         // Test run_app with valid configurations
-        let mut config = Config::default();
-        config.log_level = config::LogLevel::Debug;
+        let config = Config {
+            log_level: config::LogLevel::Debug,
+            ..Default::default()
+        };
         assert!(run_app(config).is_ok());
 
-        config = Config::default();
-        config.log_level = config::LogLevel::Silent;
+        let config = Config {
+            log_level: config::LogLevel::Silent,
+            ..Default::default()
+        };
         assert!(run_app(config).is_ok());
 
-        config = Config::default();
-        config.log_level = config::LogLevel::Verbose;
+        let config = Config {
+            log_level: config::LogLevel::Verbose,
+            ..Default::default()
+        };
         assert!(run_app(config).is_ok());
     }
 

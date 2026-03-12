@@ -22,20 +22,26 @@ fn test_full_lifecycle_with_various_configs() {
     assert!(run_app(config).is_ok());
 
     // Test with CPU affinity
-    let mut config = Config::default();
-    config.cpu = 2;
+    let config = Config {
+        cpu: 2,
+        ..Default::default()
+    };
     assert!(run_app(config).is_ok());
 
     // Test with priority
-    config = Config::default();
-    config.prio = 50;
+    let config = Config {
+        prio: 50,
+        ..Default::default()
+    };
     assert!(run_app(config).is_ok());
 
     // Test with all flags enabled
-    config = Config::default();
-    config.enable_sync = true;
-    config.enable_plot = true;
-    config.enable_apex = true;
+    let config = Config {
+        enable_sync: true,
+        enable_plot: true,
+        enable_apex: true,
+        ..Default::default()
+    };
     assert!(run_app(config).is_ok());
 
     // Test with different log levels
@@ -62,8 +68,10 @@ fn test_context_lifecycle() {
 fn test_multiple_context_instances() {
     // Test creating multiple context instances
     for i in 0..5 {
-        let mut config = Config::default();
-        config.node_id = format!("node-{}", i);
+        let config = Config {
+            node_id: format!("node-{}", i),
+            ..Default::default()
+        };
         let mut ctx = Context::new(config);
         assert!(ctx.initialize().is_ok());
         ctx.cleanup();

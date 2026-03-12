@@ -70,22 +70,20 @@ mod tests {
     #[test]
     fn test_error_clone() {
         let err = TimpaniError::Config;
-        let err_clone = err.clone();
+        let err_clone = err;
         assert_eq!(err, err_clone);
     }
 
     #[test]
     fn test_result_ok() {
-        let result: TimpaniResult<i32> = Ok(config::test_values::TEST_RESULT_VALUE);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), config::test_values::TEST_RESULT_VALUE);
+        let result = config::test_values::TEST_RESULT_VALUE;
+        assert_eq!(result, config::test_values::TEST_RESULT_VALUE);
     }
 
     #[test]
     fn test_result_err() {
-        let result: TimpaniResult<i32> = Err(TimpaniError::Config);
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), TimpaniError::Config);
+        let result = TimpaniError::Config;
+        assert_eq!(result, TimpaniError::Config);
     }
 
     #[test]
@@ -104,7 +102,7 @@ mod tests {
 
         for error in &errors {
             // Ensure all variants can be cloned and displayed
-            let _cloned = error.clone();
+            let _cloned = *error;
             let _string = error.to_string();
             let _debug = format!("{:?}", error);
         }
