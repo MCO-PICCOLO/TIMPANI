@@ -38,18 +38,19 @@ detect_os() {
 build_timpani_n() {
     local os
     os=$(detect_os)
-    local generator
+    local generator="DEB"
 
-    case "${os}" in
-        ubuntu|debian) generator="DEB" ;;
-        centos|rhel|fedora) generator="RPM" ;;
-        *)
-            log "Unknown OS '${os}', defaulting to DEB;RPM (may fail if tools missing)."
-            generator="DEB;RPM"
-            ;;
-    esac
+    # CPack's RPM generator only needs the `rpmbuild` tool, which is available
+    # on any distro (e.g. `apt install rpm` on Ubuntu/Debian) — a CentOS/RHEL
+    # host is NOT required to produce a .rpm.
+    if command -v rpmbuild &>/dev/null; then
+        generator="DEB;RPM"
+    else
+        log "rpmbuild not found — building .deb only. Install it to also get" \
+            " a .rpm (Ubuntu/Debian: 'sudo apt-get install rpm')."
+    fi
 
-    log "Building timpani-n (generator: ${generator})..."
+    log "Building timpani-n for OS '${os}' (generator: ${generator})..."
     mkdir -p "${REPO_ROOT}/timpani-n/build"
     (
         cd "${REPO_ROOT}/timpani-n/build"

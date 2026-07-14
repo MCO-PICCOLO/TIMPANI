@@ -151,6 +151,16 @@ set(CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${CMAKE_SOURCE_DIR}/pkg/prerm")
 # Mark the arguments file as a config file so rpm preserves local edits
 # across package upgrades (equivalent to the .deb conffiles entry above).
 set(CPACK_RPM_USER_FILELIST "%config(noreplace) /etc/default/timpani-n")
+# These parent directories are already owned (with their own attributes) by
+# the base "filesystem" and "systemd" RPM packages. Without this, CPack's RPM
+# generator auto-adds %dir entries for them with its own attributes, which
+# rpm then refuses to install due to a "file ... conflicts with file from
+# package ..." ownership/attribute mismatch.
+set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+    "/etc/default"
+    "/usr/lib/systemd"
+    "/usr/lib/systemd/system"
+)
 
 include(CPack)
 

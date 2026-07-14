@@ -1,9 +1,10 @@
 # Timpani Build & Install
 
 > **Note:** This folder is the packaged deliverable for the sdv-blueprint
-> release: the pre-built `timpani-n-2.0.0-Linux.deb` package and
-> `timpani-o-0.1.0.tar` container image, plus `build.sh`/`install.sh` to
-> build and install both components in one step.
+> release: the pre-built `timpani-n-2.0.0-Linux.deb` and
+> `timpani-n-2.0.0-Linux.rpm` packages, plus the `timpani-o-0.1.0.tar`
+> container image, and `build.sh`/`install.sh` to build and install both
+> components in one step.
 >
 > Load the container image with `podman load -i timpani-o-0.1.0.tar`. If you
 > rebuild it locally with `./build.sh o` instead, it's written to
@@ -31,7 +32,7 @@ One-step build and install for the Timpani release artifacts:
 
 **Expected output:**
 ```
-[build.sh] Building timpani-n (generator: DEB)...
+[build.sh] Building timpani-n for OS 'ubuntu' (generator: DEB;RPM)...
 -- Configuring done
 -- Generating done
 -- Build files have been written to: .../timpani-n/build
@@ -40,8 +41,17 @@ One-step build and install for the Timpani release artifacts:
 [100%] Built target timpani-n
 CPack: Create package using DEB
 CPack: - package: .../timpani-n/build/timpani-n-2.0.0-Linux.deb generated.
+CPack: Create package using RPM
+CPack: - package: .../timpani-n/build/timpani-n-2.0.0-Linux.rpm generated.
 [build.sh] timpani-n package(s) copied to .../dist/
 ```
+
+`.rpm` generation only needs the `rpmbuild` tool — it works on Ubuntu/Debian
+too (no CentOS/RHEL host required). Install it with:
+```bash
+sudo apt-get install -y rpm      # Ubuntu/Debian
+```
+If `rpmbuild` isn't found, `build.sh` falls back to building the `.deb` only.
 
 ```bash
 ./build.sh o      # build timpani-o only   -> dist/timpani-o-<version>.tar (podman image)
@@ -70,7 +80,8 @@ Artifacts are written to `dist/` at the repo root:
 
 ```
 dist/
-├── timpani-n-2.0.0-Linux.deb   # (or .rpm, depending on host OS)
+├── timpani-n-2.0.0-Linux.deb
+├── timpani-n-2.0.0-Linux.rpm
 └── timpani-o-0.1.0.tar         # podman image, portable via `podman load`
 ```
 
@@ -79,13 +90,15 @@ ls -lh dist/
 ```
 ```
 total 30M
--rw-rw-r-- 1 lg lg 748K Jul 10 14:27 timpani-n-2.0.0-Linux.deb
+-rw-rw-r-- 1 lg lg 749K Jul 14 16:15 timpani-n-2.0.0-Linux.deb
+-rw-rw-r-- 1 lg lg 209K Jul 14 16:15 timpani-n-2.0.0-Linux.rpm
 -rw-r--r-- 1 lg lg  29M Jul 10 15:57 timpani-o-0.1.0.tar
 ```
 
-`build.sh` auto-detects the host OS (`/etc/os-release`) to pick the CPack generator
-(`DEB` on Ubuntu/Debian, `RPM` on CentOS/RHEL/Fedora) for `timpani-n`.
-`timpani-o` is always built as a Podman image regardless of host OS. The
+`build.sh` always builds the `.deb` for `timpani-n`, and additionally builds
+the `.rpm` whenever `rpmbuild` is available on the host — on any distro, not
+just CentOS/RHEL/Fedora. `timpani-o` is always built as a Podman image
+regardless of host OS. The
 Containerfile builds on Ubuntu 22.04 (needed for the gRPC/Protobuf toolchain)
 but the final runtime stage is `alpine:3.21` with only the specific shared
 libraries `timpani-o` links against copied in (per `ldd`) — this keeps the

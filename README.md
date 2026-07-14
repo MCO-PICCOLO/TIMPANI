@@ -101,9 +101,11 @@ The [`sdv_blueprint/`](sdv_blueprint/README.md) folder contains ready-to-use, pr
 release artifacts for `timpani-n` and `timpani-o`, plus `build.sh`/`install.sh` to
 build and install both in one step.
 
-- **`timpani-n-2.0.0-Linux.deb`** — native Debian/Ubuntu package. Install directly with:
+- **`timpani-n-2.0.0-Linux.deb`** / **`timpani-n-2.0.0-Linux.rpm`** — native
+  Debian/Ubuntu and RPM-based package. Install directly with:
   ```bash
-  sudo dpkg -i sdv_blueprint/timpani-n-2.0.0-Linux.deb
+  sudo dpkg -i sdv_blueprint/timpani-n-2.0.0-Linux.deb   # Debian/Ubuntu
+  sudo rpm -i sdv_blueprint/timpani-n-2.0.0-Linux.rpm    # CentOS/RHEL/Fedora
   ```
   This installs the `timpani-n` binary and registers/starts it as a systemd service
   (`timpani-n.service`) running as root, since it needs direct eBPF/scheduler access
